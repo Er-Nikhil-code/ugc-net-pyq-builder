@@ -148,9 +148,25 @@ def load_history_from_github():
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
-
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&family=Material+Icons&display=swap');
 *, html, body, [class*="css"] {
     font-family: 'DM Sans', sans-serif !important;
+}
+/* Restore Material Icons font so expander chevrons render as icons not text */
+.material-icons,
+.material-icons-outlined,
+.material-icons-round,
+span[class*="material-icon"],
+div[data-testid="stExpander"] details summary span[style*="font-family"],
+div[data-testid="stExpander"] details summary > span:first-child {
+    font-family: 'Material Icons' !important;
+    font-feature-settings: 'liga' !important;
+    -webkit-font-feature-settings: 'liga' !important;
+    font-style: normal !important;
+    font-weight: normal !important;
+    letter-spacing: normal !important;
+    text-rendering: optimizeLegibility !important;
+    -webkit-font-smoothing: antialiased !important;
 }
 #MainMenu, footer, header { visibility: hidden; }
 
