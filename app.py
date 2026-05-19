@@ -264,7 +264,9 @@ div[data-testid="stRadio"] label { font-size: 13px !important; }
 div[data-testid="stExpander"] details summary {
     display: flex !important;
     align-items: center !important;
-    overflow: hidden !important;
+    gap: 8px !important;
+    overflow: visible !important;
+    padding: 8px 12px !important;
 }
 div[data-testid="stExpander"] details summary p,
 div[data-testid="stExpander"] details summary span {
@@ -272,17 +274,20 @@ div[data-testid="stExpander"] details summary span {
     text-overflow: ellipsis !important;
     white-space: nowrap !important;
     position: static !important;
+    transform: none !important;
     font-size: 14px !important;
     font-weight: 500 !important;
     color: #374151 !important;
+    flex: 1 !important;
+    min-width: 0 !important;
 }
-div[data-testid="stExpander"] details summary::before,
-div[data-testid="stExpander"] details summary::after {
-    display: none !important;
-}
-div[data-testid="stExpander"] details > summary > * {
+div[data-testid="stExpander"] details summary svg {
+    flex-shrink: 0 !important;
     position: static !important;
     transform: none !important;
+}
+div[data-testid="stExpander"] details[open] summary svg {
+    transform: rotate(90deg) !important;
 }
 </style>
 """, unsafe_allow_html=True)
