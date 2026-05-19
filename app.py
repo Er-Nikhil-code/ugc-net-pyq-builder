@@ -23,19 +23,17 @@ st.set_page_config(
 
 # ── GitHub API Configuration (from secrets) ───────────────────────────────────
 GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
-REPO_OWNER = "Er-Nikhil-code"          # Your GitHub username
-REPO_NAME = "ugc-net-pyq-builder"      # Your repository name
-DATA_DIR = "data"                      # Folder where all data will be stored
+REPO_OWNER = "Er-Nikhil-code"
+REPO_NAME = "ugc-net-pyq-builder"
+DATA_DIR = "data"
 
-# ── Helper: Upload file to GitHub (with detailed error reporting) ─────────────
+# ── Helper: Upload file to GitHub ─────────────────────────────────────────────
 def upload_to_github(file_bytes, repo_path, commit_message):
-    """Upload a file (bytes) to GitHub repository. Returns True on success."""
     url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{repo_path}"
     headers = {
         "Authorization": f"token {GITHUB_TOKEN}",
         "Accept": "application/vnd.github.v3+json",
     }
-    # Get current SHA if file exists (for update)
     sha = None
     resp = requests.get(url, headers=headers)
     if resp.status_code == 200:
@@ -43,16 +41,12 @@ def upload_to_github(file_bytes, repo_path, commit_message):
     elif resp.status_code != 404:
         st.error(f"GitHub GET error: {resp.status_code} - {resp.text}")
         return False
-    
+
     content_b64 = base64.b64encode(file_bytes).decode("utf-8")
-    payload = {
-        "message": commit_message,
-        "content": content_b64,
-        "branch": "main",
-    }
+    payload = {"message": commit_message, "content": content_b64, "branch": "main"}
     if sha:
         payload["sha"] = sha
-    
+
     response = requests.put(url, headers=headers, json=payload)
     if response.status_code in [200, 201]:
         return True
@@ -60,26 +54,21 @@ def upload_to_github(file_bytes, repo_path, commit_message):
         st.error(f"GitHub PUT error: {response.status_code} - {response.text}")
         return False
 
-# ── Helper: Ensure data/images folder exists (create .gitkeep if needed) ──────
+# ── Helper: Ensure data/images folder exists ──────────────────────────────────
 def ensure_data_folders():
-    """Create data/ and data/images/ folders if they don't exist."""
-    # Check if data/ folder exists by listing it
     url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{DATA_DIR}"
     headers = {"Authorization": f"token {GITHUB_TOKEN}"}
     resp = requests.get(url, headers=headers)
     if resp.status_code == 404:
-        # Create data/ folder by uploading a .gitkeep file
         upload_to_github(b"", f"{DATA_DIR}/.gitkeep", "Create data folder")
-    # Now check data/images/
     url_images = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{DATA_DIR}/images"
     resp_images = requests.get(url_images, headers=headers)
     if resp_images.status_code == 404:
         upload_to_github(b"", f"{DATA_DIR}/images/.gitkeep", "Create images folder")
 
-# ── Call ensure_data_folders() at startup ─────────────────────────────────────
 ensure_data_folders()
 
-# ── Helper: Read file from GitHub (returns decoded text or None) ─────────────
+# ── Helper: Read file from GitHub ─────────────────────────────────────────────
 def read_from_github(repo_path):
     url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{repo_path}"
     headers = {"Authorization": f"token {GITHUB_TOKEN}"}
@@ -89,16 +78,16 @@ def read_from_github(repo_path):
         return base64.b64decode(content_b64).decode("utf-8")
     return None
 
-# ── Helper: List files in a GitHub folder ────────────────────────────────────
+# ── Helper: List files in a GitHub folder ─────────────────────────────────────
 def list_files_in_github_folder(folder_path):
     url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{folder_path}"
     headers = {"Authorization": f"token {GITHUB_TOKEN}"}
     resp = requests.get(url, headers=headers)
     if resp.status_code == 200:
-        return resp.json()  # list of file objects
+        return resp.json()
     return []
 
-# ── Counter management using GitHub (stored in data/counter.json) ────────────
+# ── Counter management ────────────────────────────────────────────────────────
 def _read_ctr():
     try:
         content = read_from_github(f"{DATA_DIR}/counter.json")
@@ -126,7 +115,7 @@ def make_qid(year, session, shift, ctr=None):
     base = f"UGCNET_P1_{year}_{session}_{sc}"
     return f"{base}_{int(ctr):04d}" if ctr else base
 
-# ── Load session history from GitHub (all JSON files in data/ except counter) ─
+# ── Load session history from GitHub ──────────────────────────────────────────
 def load_history_from_github():
     history = []
     files = list_files_in_github_folder(DATA_DIR)
@@ -144,30 +133,15 @@ def load_history_from_github():
     history.sort(key=lambda x: x["id"])
     return history
 
-# ── CSS (unchanged from your design) ─────────────────────────────────────────
+# ── CSS ───────────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&family=Material+Icons&display=swap');
+
 *, html, body, [class*="css"] {
     font-family: 'DM Sans', sans-serif !important;
 }
-/* Restore Material Icons font so expander chevrons render as icons not text */
-.material-icons,
-.material-icons-outlined,
-.material-icons-round,
-span[class*="material-icon"],
-div[data-testid="stExpander"] details summary span[style*="font-family"],
-div[data-testid="stExpander"] details summary > span:first-child {
-    font-family: 'Material Icons' !important;
-    font-feature-settings: 'liga' !important;
-    -webkit-font-feature-settings: 'liga' !important;
-    font-style: normal !important;
-    font-weight: normal !important;
-    letter-spacing: normal !important;
-    text-rendering: optimizeLegibility !important;
-    -webkit-font-smoothing: antialiased !important;
-}
+
 #MainMenu, footer, header { visibility: hidden; }
 
 .block-container {
@@ -218,7 +192,7 @@ div[data-testid="stExpander"] details summary > span:first-child {
 .section-divider       { border: none; border-top: 1px solid #efefef; margin: 20px 0 16px 0; }
 .section-divider-heavy { border: none; border-top: 2px solid #f0f0f0; margin: 24px 0 20px 0; }
 
-/* Option badge (A B C D inline) */
+/* Option badge */
 .opt-badge {
     display: inline-flex;
     align-items: center;
@@ -266,6 +240,7 @@ div[data-testid="stCheckbox"] label {
 }
 div[data-testid="stRadio"] label { font-size: 13px !important; }
 
+/* Preview empty state */
 .preview-empty {
     background: #fafafa;
     border: 1.5px dashed #e5e7eb;
@@ -276,7 +251,7 @@ div[data-testid="stRadio"] label { font-size: 13px !important; }
     font-size: 13px;
 }
 
-/* Hide broken Material Icons span (renders as "oar" / "keyboard_arrow_right") */
+/* ── Expander fix: hide broken Material Icons span ("oar" / "keyboard_arrow_right") ── */
 div[data-testid="stExpander"] details summary > span:first-of-type {
     display: none !important;
     visibility: hidden !important;
@@ -300,7 +275,7 @@ div[data-testid="stExpander"] details summary::-webkit-details-marker {
 }
 div[data-testid="stExpander"] details summary::before {
     content: '›' !important;
-    font-size: 20px !important;
+    font-size: 22px !important;
     font-family: 'DM Sans', sans-serif !important;
     color: #9ca3af !important;
     line-height: 1 !important;
@@ -313,7 +288,6 @@ div[data-testid="stExpander"] details[open] summary::before {
     transform: rotate(90deg) !important;
 }
 </style>
-""", unsafe_allow_html=True)</style>
 """, unsafe_allow_html=True)
 
 # ── Constants ─────────────────────────────────────────────────────────────────
@@ -331,7 +305,7 @@ AR_OPTS  = [
     {"id":"D","text":"Assertion (A) is false but Reason (R) is true."},
 ]
 
-# ── Callbacks (on_click → no scroll-to-top) ──────────────────────────────────
+# ── Callbacks ─────────────────────────────────────────────────────────────────
 def _reindex_options():
     opts = st.session_state.options
     for i, o in enumerate(opts):
@@ -367,14 +341,14 @@ def cb_remove_seq_item():
 def cb_clear_history():
     st.session_state.history = []
 
-# ── Session state init (robust) ──────────────────────────────────────────────
+# ── Session state init ────────────────────────────────────────────────────────
 def _ss(key, val):
     if key not in st.session_state:
         st.session_state[key] = val
 
 _ss("match_rows", 4)
 _ss("seq_items",  4)
-_ss("history",    load_history_from_github())   # Load from GitHub on start
+_ss("history",    load_history_from_github())
 _ss("options", [
     {"id":"A","text":"","eq":"","eq_on":False,"img_on":False,"img_bytes":None},
     {"id":"B","text":"","eq":"","eq_on":False,"img_on":False,"img_bytes":None},
@@ -393,9 +367,9 @@ def maybe_reset_options(qtype):
             {"id":"C","text":"","eq":"","eq_on":False,"img_on":False,"img_bytes":None},
             {"id":"D","text":"","eq":"","eq_on":False,"img_on":False,"img_bytes":None},
         ]
-        st.session_state.match_rows     = 4
-        st.session_state.seq_items      = 4
-        st.session_state.prev_qtype     = qtype
+        st.session_state.match_rows      = 4
+        st.session_state.seq_items       = 4
+        st.session_state.prev_qtype      = qtype
         st.session_state.current_correct = "A"
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -432,10 +406,8 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# ─────────────────────────────────────────────────────────────────────────────
-# HELPER FUNCTIONS
+# ── Helper functions ──────────────────────────────────────────────────────────
 def render_q_toggles(eq_key, img_key):
-    """Equation + Image toggles for question. Returns (eq_on, eq_val, img_on, img_bytes)."""
     tq1, tq2 = st.columns([1, 5])
     eq_on  = tq1.checkbox("＋ Equation", key=f"q_eq_toggle_{eq_key}")
     img_on = tq2.checkbox("＋ Image",    key=f"q_img_toggle_{img_key}")
@@ -451,29 +423,21 @@ def render_q_toggles(eq_key, img_key):
     return eq_on, eq_val, img_on, img_bytes
 
 def render_options_grid(opts, qtype_key):
-    """Each option row: [badge A] [text input] [Eq ☐] [Img ☐] [✕]"""
     for idx, opt in enumerate(opts):
         col_badge, col_input, col_eq, col_img, col_rm = st.columns([0.5, 6, 1.2, 1.2, 0.7])
-
         col_badge.markdown(
-            f"<div style='padding-top:7px'>"
-            f"<span class='opt-badge'>{opt['id']}</span></div>",
+            f"<div style='padding-top:7px'><span class='opt-badge'>{opt['id']}</span></div>",
             unsafe_allow_html=True,
         )
         opt["text"] = col_input.text_input(
-            f"opt_{qtype_key}_{idx}",
-            value=opt["text"],
-            placeholder=f"Option {opt['id']}…",
-            label_visibility="collapsed",
+            f"opt_{qtype_key}_{idx}", value=opt["text"],
+            placeholder=f"Option {opt['id']}…", label_visibility="collapsed",
             key=f"opt_t_{qtype_key}_{idx}",
         )
         opt["eq_on"]  = col_eq.checkbox("Eq",  key=f"opt_eq_on_{qtype_key}_{idx}",  value=opt.get("eq_on",  False))
         opt["img_on"] = col_img.checkbox("Img", key=f"opt_img_on_{qtype_key}_{idx}", value=opt.get("img_on", False))
-
         if len(opts) > 2:
-            col_rm.button("✕", key=f"opt_rm_{qtype_key}_{idx}",
-                          on_click=cb_remove_option, args=(idx,))
-
+            col_rm.button("✕", key=f"opt_rm_{qtype_key}_{idx}", on_click=cb_remove_option, args=(idx,))
         if opt["eq_on"]:
             opt["eq"] = st.text_input(
                 f"LaTeX for {opt['id']}", placeholder="e.g. x^2",
@@ -490,7 +454,6 @@ def render_options_grid(opts, qtype_key):
                 st.image(uploaded, width=120)
             else:
                 opt["img_bytes"] = None
-
         st.markdown("<div style='height:2px'></div>", unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -509,12 +472,10 @@ if qtype == "MCQ":
     question_text = st.text_area("Question text", height=90, placeholder="Enter your question here…",
                                  label_visibility="collapsed", key="q_text_mcq")
     q_eq_on, q_eq_val, q_img_on, q_img_bytes = render_q_toggles("mcq","mcq")
-
     st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
     st.markdown('<p class="field-label">Options</p>', unsafe_allow_html=True)
     render_options_grid(st.session_state.options, "mcq")
     st.button("＋  Add Option", key="add_opt_mcq", on_click=cb_add_option, use_container_width=True)
-
     options_final = [
         {"id":o["id"],"text":o["text"],"equation":o.get("eq",""),"has_image":o.get("img_bytes") is not None}
         for o in st.session_state.options
@@ -525,10 +486,9 @@ elif qtype == "Assertion-Reason":
     st.markdown('<p class="field-label">Assertion (A)</p>', unsafe_allow_html=True)
     ar_a = st.text_area("Assertion (A)", height=80, placeholder="Write the assertion…", label_visibility="collapsed", key="ar_a")
     st.markdown('<p class="field-label">Reason (R)</p>', unsafe_allow_html=True)
-    ar_r = st.text_area("Reason (R)",    height=80, placeholder="Write the reason…",    label_visibility="collapsed", key="ar_r")
+    ar_r = st.text_area("Reason (R)", height=80, placeholder="Write the reason…", label_visibility="collapsed", key="ar_r")
     question_text = f"Assertion (A): {ar_a}\nReason (R): {ar_r}"
     q_eq_on, q_eq_val, q_img_on, q_img_bytes = render_q_toggles("ar","ar")
-
     st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
     st.markdown('<p class="field-label">Options (standard)</p>', unsafe_allow_html=True)
     for opt in AR_OPTS:
@@ -548,13 +508,11 @@ elif qtype == "Match the Following":
         label_visibility="collapsed", key="q_match_stem"
     )
     q_eq_on, q_eq_val, q_img_on, q_img_bytes = render_q_toggles("match","match")
-
     st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
     st.markdown('<p class="field-label">Match Table</p>', unsafe_allow_html=True)
     ar_col, rm_col, _ = st.columns([1,1,4])
     ar_col.button("➕ Add row",    key="match_add", on_click=cb_add_match_row)
     rm_col.button("➖ Remove row", key="match_rm",  on_click=cb_remove_match_row)
-
     hc1, hc2, hc3 = st.columns([5,0.5,5])
     hc1.markdown("<span style='font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.5px'>Column A</span>", unsafe_allow_html=True)
     hc3.markdown("<span style='font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.5px'>Column B</span>", unsafe_allow_html=True)
@@ -563,21 +521,16 @@ elif qtype == "Match the Following":
         mc1, mc2, mc3 = st.columns([5,0.5,5])
         lv = mc1.text_input(f"ColA_{i}", placeholder=f"Item {chr(65+i)}", label_visibility="collapsed", key=f"ml_{i}")
         mc2.markdown("<div style='text-align:center;padding-top:6px;color:#ccc;font-size:16px'>→</div>", unsafe_allow_html=True)
-        rv = mc3.text_input(f"ColB_{i}", placeholder=f"Item {i+1}",       label_visibility="collapsed", key=f"mr_{i}")
+        rv = mc3.text_input(f"ColB_{i}", placeholder=f"Item {i+1}", label_visibility="collapsed", key=f"mr_{i}")
         match_left.append({"id":chr(65+i),"text":lv})
         match_right.append({"id":str(i+1),"text":rv})
-
     st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
     st.markdown('<p class="field-label">Options (matching combinations)</p>', unsafe_allow_html=True)
     for i, opt in enumerate(st.session_state.options):
         cb, ci, cr = st.columns([0.5,8,0.7])
-        cb.markdown(
-            f"<div style='padding-top:7px'><span class='opt-badge'>{opt['id']}</span></div>",
-            unsafe_allow_html=True
-        )
+        cb.markdown(f"<div style='padding-top:7px'><span class='opt-badge'>{opt['id']}</span></div>", unsafe_allow_html=True)
         opt["text"] = ci.text_input(
-            f"mopt_{i}", value=opt["text"],
-            placeholder="e.g. A–3, B–1, C–2, D–4",
+            f"mopt_{i}", value=opt["text"], placeholder="e.g. A–3, B–1, C–2, D–4",
             label_visibility="collapsed", key=f"mopt_t_{i}"
         )
         if len(st.session_state.options) > 2:
@@ -594,7 +547,6 @@ elif qtype == "Passage-Based":
     question_text = st.text_area("Question", height=90, placeholder="Question based on the passage…",
                                  label_visibility="collapsed", key="pb_qtext")
     q_eq_on, q_eq_val, q_img_on, q_img_bytes = render_q_toggles("pb","pb")
-
     st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
     st.markdown('<p class="field-label">Options</p>', unsafe_allow_html=True)
     render_options_grid(st.session_state.options, "pb")
@@ -614,7 +566,6 @@ elif qtype == "Sequence Arrangement":
     question_text = st.text_input("Question stem", value="Arrange the following in the correct sequence:",
                                   label_visibility="collapsed", key="q_seq_stem")
     q_eq_on, q_eq_val, q_img_on, q_img_bytes = render_q_toggles("seq","seq")
-
     st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
     st.markdown('<p class="field-label">Sequence Items</p>', unsafe_allow_html=True)
     sa_col, sr_col, _ = st.columns([1,1,4])
@@ -623,25 +574,17 @@ elif qtype == "Sequence Arrangement":
     seq_items = []
     for i in range(st.session_state.seq_items):
         sc1, sc2 = st.columns([0.5,8])
-        sc1.markdown(
-            f"<div style='padding-top:7px'><span class='opt-badge'>{chr(65+i)}</span></div>",
-            unsafe_allow_html=True
-        )
+        sc1.markdown(f"<div style='padding-top:7px'><span class='opt-badge'>{chr(65+i)}</span></div>", unsafe_allow_html=True)
         val = sc2.text_input(f"seq_item_{i}", placeholder=f"Item {chr(65+i)}…",
                              label_visibility="collapsed", key=f"seq_{i}")
         seq_items.append({"id":chr(65+i),"text":val})
-
     st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
     st.markdown('<p class="field-label">Options (correct sequences)</p>', unsafe_allow_html=True)
     for i, opt in enumerate(st.session_state.options):
         cb, ci, cr = st.columns([0.5,8,0.7])
-        cb.markdown(
-            f"<div style='padding-top:7px'><span class='opt-badge'>{opt['id']}</span></div>",
-            unsafe_allow_html=True
-        )
+        cb.markdown(f"<div style='padding-top:7px'><span class='opt-badge'>{opt['id']}</span></div>", unsafe_allow_html=True)
         opt["text"] = ci.text_input(
-            f"sopt_{i}", value=opt["text"],
-            placeholder="e.g. A → C → B → D",
+            f"sopt_{i}", value=opt["text"], placeholder="e.g. A → C → B → D",
             label_visibility="collapsed", key=f"sopt_t_{i}"
         )
         if len(st.session_state.options) > 2:
@@ -740,19 +683,19 @@ tags_list     = [t.strip() for t in tags_raw.split(",")     if t.strip()]
 keywords_list = [k.strip() for k in keywords_raw.split(",") if k.strip()]
 
 # ─────────────────────────────────────────────────────────────────────────────
-# BUILD JSON PREVIEW (using timezone-aware datetime)
+# BUILD JSON PREVIEW
 temp_qid        = make_qid(year, session, shift, peek_next())
 q_block_preview = {"text": question_text}
 if q_eq_on and q_eq_val.strip(): q_block_preview["equation"] = q_eq_val
 
-if   qtype == "Assertion-Reason":    q_block_preview.update(extra_data); q_block_preview["options"]=options_final; q_block_preview["correct_answer"]=correct_answer
-elif qtype == "Match the Following": q_block_preview.update(extra_data); q_block_preview["options"]=options_final; q_block_preview["correct_answer"]=correct_answer
-elif qtype == "Passage-Based":       q_block_preview["passage"]=passage_text; q_block_preview["options"]=options_final; q_block_preview["correct_answer"]=correct_answer
-elif qtype == "Numerical":           q_block_preview["correct_answer"]=correct_answer; q_block_preview["answer_type"]="numerical"
-elif qtype == "Sequence Arrangement":q_block_preview.update(extra_data); q_block_preview["options"]=options_final; q_block_preview["correct_answer"]=correct_answer
-elif qtype == "True/False":          q_block_preview["options"]=options_final; q_block_preview["correct_answer"]=correct_answer
-elif qtype == "Fill in the Blank":   q_block_preview["correct_answer"]=correct_answer; q_block_preview["answer_type"]="text"
-else:                                q_block_preview["options"]=options_final; q_block_preview["correct_answer"]=correct_answer
+if   qtype == "Assertion-Reason":     q_block_preview.update(extra_data); q_block_preview["options"]=options_final; q_block_preview["correct_answer"]=correct_answer
+elif qtype == "Match the Following":  q_block_preview.update(extra_data); q_block_preview["options"]=options_final; q_block_preview["correct_answer"]=correct_answer
+elif qtype == "Passage-Based":        q_block_preview["passage"]=passage_text; q_block_preview["options"]=options_final; q_block_preview["correct_answer"]=correct_answer
+elif qtype == "Numerical":            q_block_preview["correct_answer"]=correct_answer; q_block_preview["answer_type"]="numerical"
+elif qtype == "Sequence Arrangement": q_block_preview.update(extra_data); q_block_preview["options"]=options_final; q_block_preview["correct_answer"]=correct_answer
+elif qtype == "True/False":           q_block_preview["options"]=options_final; q_block_preview["correct_answer"]=correct_answer
+elif qtype == "Fill in the Blank":    q_block_preview["correct_answer"]=correct_answer; q_block_preview["answer_type"]="text"
+else:                                 q_block_preview["options"]=options_final; q_block_preview["correct_answer"]=correct_answer
 
 expl_block_preview = {"text": explanation}
 if expl_eq_on and expl_eq_val.strip(): expl_block_preview["equation"] = expl_eq_val
@@ -829,7 +772,6 @@ else:
                 unsafe_allow_html=True,
             )
             if opt.get("equation") and opt["equation"].strip(): st.latex(opt["equation"])
-            # Show option image if present (from session state)
             mo = next((o for o in st.session_state.options if o["id"]==opt["id"]), None)
             if mo and mo.get("img_bytes"):
                 st.image(mo["img_bytes"], width=150)
@@ -843,75 +785,56 @@ else:
             unsafe_allow_html=True
         )
     if expl_eq_on  and expl_eq_val.strip(): st.latex(expl_eq_val)
-    if expl_img_on and expl_img_bytes:       st.image(expl_img_bytes, width=300)
+    if expl_img_on and expl_img_bytes:      st.image(expl_img_bytes, width=300)
 
 with st.expander("View JSON", expanded=False):
     st.code(json_preview_str, language="json")
 
 # ─────────────────────────────────────────────────────────────────────────────
-# SAVE BUTTON (upload to GitHub)
+# SAVE BUTTON
 st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
 
 def do_save():
-    # Increment counter and create final QID
     ctr = incr_ctr()
     saved_id = make_qid(year, session, shift, ctr)
-    
-    # Prepare image list for upload
     images_to_upload = []
-    
+
     def add_image(image_bytes, filename):
         if image_bytes:
             images_to_upload.append({"filename": filename, "bytes": image_bytes})
-    
+
     if q_img_on and q_img_bytes:
         add_image(q_img_bytes, f"{saved_id}_q.jpg")
-    
     if options_final and qtype not in ("Numerical","Fill in the Blank","Assertion-Reason"):
         for opt in st.session_state.options:
             if opt.get("img_bytes"):
                 add_image(opt["img_bytes"], f"{saved_id}_opt_{opt['id']}.jpg")
-    
     if expl_img_on and expl_img_bytes:
         add_image(expl_img_bytes, f"{saved_id}_expl.jpg")
-    
-    # Build final JSON data
+
     final_q_block = {"text": question_text}
     if q_eq_on and q_eq_val.strip():
         final_q_block["equation"] = q_eq_val
     if q_img_on and q_img_bytes:
         final_q_block["image"] = f"images/{saved_id}_q.jpg"
-    
+
     if qtype == "Assertion-Reason":
-        final_q_block.update(extra_data)
-        final_q_block["options"] = options_final
-        final_q_block["correct_answer"] = correct_answer
+        final_q_block.update(extra_data); final_q_block["options"] = options_final; final_q_block["correct_answer"] = correct_answer
     elif qtype == "Match the Following":
-        final_q_block.update(extra_data)
-        final_q_block["options"] = options_final
-        final_q_block["correct_answer"] = correct_answer
+        final_q_block.update(extra_data); final_q_block["options"] = options_final; final_q_block["correct_answer"] = correct_answer
     elif qtype == "Passage-Based":
-        final_q_block["passage"] = passage_text
-        final_q_block["options"] = options_final
-        final_q_block["correct_answer"] = correct_answer
+        final_q_block["passage"] = passage_text; final_q_block["options"] = options_final; final_q_block["correct_answer"] = correct_answer
     elif qtype == "Numerical":
-        final_q_block["correct_answer"] = correct_answer
-        final_q_block["answer_type"] = "numerical"
+        final_q_block["correct_answer"] = correct_answer; final_q_block["answer_type"] = "numerical"
     elif qtype == "Sequence Arrangement":
-        final_q_block.update(extra_data)
-        final_q_block["options"] = options_final
-        final_q_block["correct_answer"] = correct_answer
+        final_q_block.update(extra_data); final_q_block["options"] = options_final; final_q_block["correct_answer"] = correct_answer
     elif qtype == "True/False":
-        final_q_block["options"] = options_final
-        final_q_block["correct_answer"] = correct_answer
+        final_q_block["options"] = options_final; final_q_block["correct_answer"] = correct_answer
     elif qtype == "Fill in the Blank":
-        final_q_block["correct_answer"] = correct_answer
-        final_q_block["answer_type"] = "text"
+        final_q_block["correct_answer"] = correct_answer; final_q_block["answer_type"] = "text"
     else:
-        final_q_block["options"] = options_final
-        final_q_block["correct_answer"] = correct_answer
-    
-    # Add option image paths to options_final
+        final_q_block["options"] = options_final; final_q_block["correct_answer"] = correct_answer
+
     if options_final and qtype not in ("Numerical","Fill in the Blank","Assertion-Reason"):
         for opt in st.session_state.options:
             if opt.get("img_bytes"):
@@ -919,13 +842,13 @@ def do_save():
                     if of["id"] == opt["id"]:
                         of["image"] = f"images/{saved_id}_opt_{opt['id']}.jpg"
                         break
-    
+
     final_expl_block = {"text": explanation}
     if expl_eq_on and expl_eq_val.strip():
         final_expl_block["equation"] = expl_eq_val
     if expl_img_on and expl_img_bytes:
         final_expl_block["image"] = f"images/{saved_id}_expl.jpg"
-    
+
     now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     final_data = {
         "question_id": saved_id,
@@ -938,8 +861,7 @@ def do_save():
         "retrieval": {"embedding_text": question_text},
         "meta": {"created_at": now_utc, "version": "3.0"},
     }
-    
-    # Upload JSON to GitHub
+
     json_bytes = json.dumps(final_data, indent=2, ensure_ascii=False).encode("utf-8")
     json_path = f"{DATA_DIR}/{saved_id}.json"
     success = upload_to_github(json_bytes, json_path, f"Add JSON for {saved_id}")
@@ -956,9 +878,7 @@ def do_save():
         st.success(f"✅ Saved — {saved_id}")
     else:
         st.error("❌ Failed to save to GitHub. Check token and repository settings.")
-        # Do not call st.rerun() here
 
-# Stash current values for callback (not really needed now, but kept for consistency)
 _, save_col = st.columns([5,1])
 with save_col:
     st.button("💾  Save", key="save_btn", on_click=do_save, use_container_width=True)
