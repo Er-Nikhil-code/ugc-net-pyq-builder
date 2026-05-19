@@ -144,7 +144,6 @@ def load_history_from_github():
     history.sort(key=lambda x: x["id"])
     return history
 
-# ── CSS with expander fix ─────────────────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
@@ -260,40 +259,6 @@ div[data-testid="stRadio"] label { font-size: 13px !important; }
     text-align: center;
     color: #c0c0c0;
     font-size: 13px;
-}
-
-/* ── Expander fix: hide broken Material Icons span and replace with clean chevron ── */
-div[data-testid="stExpander"] details summary > span:first-of-type {
-    display: none !important;
-    visibility: hidden !important;
-    width: 0 !important;
-    overflow: hidden !important;
-}
-
-div[data-testid="stExpander"] details summary {
-    list-style: none !important;
-    display: flex !important;
-    align-items: center !important;
-    gap: 10px !important;
-    padding: 10px 14px !important;
-    cursor: pointer !important;
-}
-div[data-testid="stExpander"] details summary::-webkit-details-marker {
-    display: none !important;
-}
-div[data-testid="stExpander"] details summary::before {
-    content: '›' !important;
-    font-size: 22px !important;
-    font-family: 'DM Sans', sans-serif !important;
-    color: #9ca3af !important;
-    line-height: 1 !important;
-    display: inline-block !important;
-    transition: transform 0.2s ease !important;
-    transform: rotate(0deg) !important;
-    flex-shrink: 0 !important;
-}
-div[data-testid="stExpander"] details[open] summary::before {
-    transform: rotate(90deg) !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -892,19 +857,28 @@ with save_col:
     st.button("💾  Save", key="save_btn", on_click=do_save, use_container_width=True)
 
 # ─────────────────────────────────────────────────────────────────────────────
+
 # SESSION HISTORY
 if st.session_state.history:
     st.markdown('<hr class="section-divider-heavy">', unsafe_allow_html=True)
+    hdr_col, clr_col = st.columns([4,1])
+    hdr_col.markdown(
+        f"<p class='field-label'>Session History "
+        f"<span style='font-weight:400;color:#b0b0b0;text-transform:none;letter-spacing:0'>"
+        f"({len(st.session_state.history)} saved)</span></p>",
+        unsafe_allow_html=True,
+    )
+    clr_col.button("🗑 Clear", key="clear_hist", on_click=cb_clear_history)
     
-    # Header row
-    col1, col2 = st.columns([4, 1])
-    col1.markdown(f"<p class='field-label'>Session History <span style='font-weight:400;color:#b0b0b0;text-transform:none;letter-spacing:0'>({len(st.session_state.history)} saved)</span></p>", unsafe_allow_html=True)
-    col2.button("🗑 Clear", key="clear_hist", on_click=cb_clear_history)
-    
-    # Display each history item in an expander
     for idx, item in enumerate(reversed(st.session_state.history)):
         num = len(st.session_state.history) - idx
-        # Use a unique key for each expander
+        # Use a simple expander without any custom CSS interference
         with st.expander(f"#{num} · {item['id']}", expanded=False):
             st.write(f"**File:** `{item['id']}.json`")
             st.write(f"**Type:** {item['type']}  ·  **Difficulty:** {item['difficulty']}")
+
+st.markdown(
+    "<div style='margin-top:40px;text-align:center;font-size:11px;color:#d1d5db;letter-spacing:0.5px'>"
+    "UGC NET Paper 1 · PYQ JSON Builder developed by Nikhil</div>",
+    unsafe_allow_html=True,
+)
