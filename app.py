@@ -1,11 +1,10 @@
 """
 UGC NET Paper 1 — PYQ JSON Builder v3.0 (GitHub Storage)
-- All JSON and images saved to GitHub repository (data/ folder)
+- JSON saved to data/json/<unit_folder>/
+- Images saved to data/images/<unit_folder>/
 - Counter stored in data/counter.json
 - Session history loaded from GitHub at startup
 - Works on Streamlit Cloud (no local file writes)
-- Automatically creates data/ and data/images/ folders
-- Fixed expander icons and session history visibility
 """
 
 import streamlit as st
@@ -30,8 +29,10 @@ except KeyError:
     st.stop()
 
 REPO_OWNER = "Er-Nikhil-code"
-REPO_NAME = "ugc-net-pyq-builder"
-DATA_DIR = "data"
+REPO_NAME  = "ugc-net-pyq-builder"
+DATA_DIR   = "data"
+JSON_DIR   = f"{DATA_DIR}/json"
+IMAGES_DIR = f"{DATA_DIR}/images"
 
 # ── Helper: Upload file to GitHub ─────────────────────────────────────────────
 def upload_to_github(file_bytes, repo_path, commit_message):
@@ -60,21 +61,26 @@ def upload_to_github(file_bytes, repo_path, commit_message):
         st.error(f"GitHub PUT error: {response.status_code} - {response.text}")
         return False
 
-# ── Helper: Ensure data/images folder exists ──────────────────────────────────
-def ensure_data_folders():
+# ── Helper: Check & create a folder on GitHub (via .gitkeep) ─────────────────
+def ensure_github_folder(folder_path):
+    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{folder_path}"
     headers = {"Authorization": f"token {GITHUB_TOKEN}"}
-    # Check data folder
-    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{DATA_DIR}"
     resp = requests.get(url, headers=headers)
     if resp.status_code == 404:
-        upload_to_github(b"", f"{DATA_DIR}/.gitkeep", "Create data folder")
-    # Check images subfolder
-    url_images = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{DATA_DIR}/images"
-    resp_images = requests.get(url_images, headers=headers)
-    if resp_images.status_code == 404:
-        upload_to_github(b"", f"{DATA_DIR}/images/.gitkeep", "Create images folder")
+        upload_to_github(b"", f"{folder_path}/.gitkeep", f"Create folder: {folder_path}")
 
-ensure_data_folders()
+# ── Helper: Ensure base folders exist ────────────────────────────────────────
+def ensure_base_folders():
+    ensure_github_folder(DATA_DIR)
+    ensure_github_folder(JSON_DIR)
+    ensure_github_folder(IMAGES_DIR)
+
+ensure_base_folders()
+
+# ── Helper: Ensure unit subfolders exist ──────────────────────────────────────
+def ensure_unit_folders(unit_folder):
+    ensure_github_folder(f"{JSON_DIR}/{unit_folder}")
+    ensure_github_folder(f"{IMAGES_DIR}/{unit_folder}")
 
 # ── Helper: Read file from GitHub ─────────────────────────────────────────────
 def read_from_github(repo_path):
@@ -123,108 +129,78 @@ def make_qid(year, session, shift, ctr=None):
     base = f"UGCNET_P1_{year}_{session}_{sc}"
     return f"{base}_{int(ctr):04d}" if ctr else base
 
-# ── Load session history from GitHub (robust) ────────────────────────────────
+def unit_to_folder(unit):
+    return unit.strip().replace(" ", "_").replace("/", "-")
+
+# ── Load session history from GitHub ─────────────────────────────────────────
 def load_history_from_github():
     history = []
-    files = list_files_in_github_folder(DATA_DIR)
-    for file in files:
-        if file["name"].endswith(".json") and file["name"] != "counter.json":
+    # Iterate over unit subfolders inside data/json/
+    unit_folders = list_files_in_github_folder(JSON_DIR)
+    for item in unit_folders:
+        if item["type"] != "dir":
+            continue
+        subfiles = list_files_in_github_folder(f"{JSON_DIR}/{item['name']}")
+        for file in subfiles:
+            if not file["name"].endswith(".json"):
+                continue
             try:
                 resp = requests.get(file["download_url"])
                 if resp.status_code == 200:
                     data = resp.json()
                     history.append({
-                        "id": data["question_id"],
-                        "type": data["classification"]["question_type"],
+                        "id":         data["question_id"],
+                        "unit":       data["classification"]["unit"],
+                        "type":       data["classification"]["question_type"],
                         "difficulty": data["classification"]["difficulty"],
-                        "json": data,
+                        "json":       data,
                     })
             except Exception as e:
-                st.warning(f"Could not load {file['name']}: {str(e)}")
+                st.warning(f"Could not load {file['name']}: {e}")
     history.sort(key=lambda x: x["id"])
     return history
 
+# ── Styles ────────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
 
-*, html, body, [class*="css"] {
-    font-family: 'DM Sans', sans-serif !important;
-}
-
+*, html, body, [class*="css"] { font-family: 'DM Sans', sans-serif !important; }
 #MainMenu, footer, header { visibility: hidden; }
+.block-container { padding: 2.5rem 2rem 5rem !important; max-width: 860px !important; }
 
-.block-container {
-    padding: 2.5rem 2rem 5rem !important;
-    max-width: 860px !important;
-}
-
-/* Page header */
 .page-header {
-    display: flex;
-    align-items: baseline;
-    gap: 10px;
-    margin-bottom: 28px;
-    padding-bottom: 18px;
-    border-bottom: 2px solid #f0f0f0;
+    display: flex; align-items: baseline; gap: 10px;
+    margin-bottom: 28px; padding-bottom: 18px; border-bottom: 2px solid #f0f0f0;
 }
 .page-title { font-size: 18px; font-weight: 600; color: #1a1a1a; letter-spacing: -0.3px; }
 .page-sub   { font-size: 12px; color: #b0b0b0; font-weight: 400; letter-spacing: 0.5px; text-transform: uppercase; }
 
-/* Section labels */
 .field-label {
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.7px;
-    text-transform: uppercase;
-    color: #888;
-    margin-bottom: 6px;
-    margin-top: 0;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.7px;
+    text-transform: uppercase; color: #888; margin-bottom: 6px; margin-top: 0;
 }
 
-/* QID badge */
 .qid-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-family: 'DM Mono', monospace;
-    font-size: 11px;
-    color: #6b7280;
-    background: #f5f5f5;
-    border: 1px solid #e8e8e8;
-    border-radius: 6px;
-    padding: 5px 12px;
-    margin-top: 2px;
-    margin-bottom: 4px;
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: 'DM Mono', monospace; font-size: 11px; color: #6b7280;
+    background: #f5f5f5; border: 1px solid #e8e8e8; border-radius: 6px;
+    padding: 5px 12px; margin-top: 2px; margin-bottom: 4px;
 }
 
-/* Dividers */
 .section-divider       { border: none; border-top: 1px solid #efefef; margin: 20px 0 16px 0; }
 .section-divider-heavy { border: none; border-top: 2px solid #f0f0f0; margin: 24px 0 20px 0; }
 
-/* Option badge */
 .opt-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    background: #f3f4f6;
-    border: 1px solid #e5e7eb;
-    border-radius: 7px;
-    font-size: 12px;
-    font-weight: 600;
-    color: #374151;
-    flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; background: #f3f4f6; border: 1px solid #e5e7eb;
+    border-radius: 7px; font-size: 12px; font-weight: 600; color: #374151; flex-shrink: 0;
 }
 
-/* Streamlit widget overrides */
 div[data-testid="stTextInput"] input,
 div[data-testid="stTextArea"] textarea {
-    border-radius: 8px !important;
-    border-color: #e5e7eb !important;
-    font-family: 'DM Sans', sans-serif !important;
-    font-size: 14px !important;
+    border-radius: 8px !important; border-color: #e5e7eb !important;
+    font-family: 'DM Sans', sans-serif !important; font-size: 14px !important;
 }
 div[data-testid="stTextInput"] input:focus,
 div[data-testid="stTextArea"] textarea:focus {
@@ -232,63 +208,36 @@ div[data-testid="stTextArea"] textarea:focus {
     box-shadow: 0 0 0 3px rgba(156,163,175,0.15) !important;
 }
 div[data-testid="stSelectbox"] > div > div {
-    border-radius: 8px !important;
-    border-color: #e5e7eb !important;
-    font-size: 13px !important;
+    border-radius: 8px !important; border-color: #e5e7eb !important; font-size: 13px !important;
 }
 div[data-testid="stButton"] > button {
-    border-radius: 8px !important;
-    font-family: 'DM Sans', sans-serif !important;
-    font-size: 13px !important;
-    font-weight: 500 !important;
-    transition: all 0.15s ease !important;
+    border-radius: 8px !important; font-family: 'DM Sans', sans-serif !important;
+    font-size: 13px !important; font-weight: 500 !important; transition: all 0.15s ease !important;
 }
-div[data-testid="stCheckbox"] label {
-    font-size: 12px !important;
-    color: #6b7280 !important;
-    font-weight: 400 !important;
-}
+div[data-testid="stCheckbox"] label { font-size: 12px !important; color: #6b7280 !important; font-weight: 400 !important; }
 div[data-testid="stRadio"] label { font-size: 13px !important; }
 
 .preview-empty {
-    background: #fafafa;
-    border: 1.5px dashed #e5e7eb;
-    border-radius: 12px;
-    padding: 40px 16px;
-    text-align: center;
-    color: #c0c0c0;
-    font-size: 13px;
+    background: #fafafa; border: 1.5px dashed #e5e7eb; border-radius: 12px;
+    padding: 40px 16px; text-align: center; color: #c0c0c0; font-size: 13px;
 }
 
 /* Fix expander label text overlap */
 div[data-testid="stExpander"] details summary {
-    display: flex !important;
-    align-items: center !important;
-    gap: 8px !important;
-    overflow: visible !important;
-    padding: 8px 12px !important;
+    display: flex !important; align-items: center !important;
+    gap: 8px !important; overflow: visible !important; padding: 8px 12px !important;
 }
 div[data-testid="stExpander"] details summary p,
 div[data-testid="stExpander"] details summary span {
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-    white-space: nowrap !important;
-    position: static !important;
-    transform: none !important;
-    font-size: 14px !important;
-    font-weight: 500 !important;
-    color: #374151 !important;
-    flex: 1 !important;
-    min-width: 0 !important;
+    overflow: hidden !important; text-overflow: ellipsis !important;
+    white-space: nowrap !important; position: static !important; transform: none !important;
+    font-size: 14px !important; font-weight: 500 !important; color: #374151 !important;
+    flex: 1 !important; min-width: 0 !important;
 }
 div[data-testid="stExpander"] details summary svg {
-    flex-shrink: 0 !important;
-    position: static !important;
-    transform: none !important;
+    flex-shrink: 0 !important; position: static !important; transform: none !important;
 }
-div[data-testid="stExpander"] details[open] summary svg {
-    transform: rotate(90deg) !important;
-}
+div[data-testid="stExpander"] details[open] summary svg { transform: rotate(90deg) !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -797,87 +746,124 @@ with st.expander("View JSON", expanded=False):
 st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
 
 def do_save():
-    ctr = incr_ctr()
-    saved_id = make_qid(year, session, shift, ctr)
+    ctr       = incr_ctr()
+    saved_id  = make_qid(year, session, shift, ctr)
+    uf        = unit_to_folder(unit)                        # e.g. "Teaching_Aptitude"
+
+    # ── Ensure unit subfolders exist on GitHub ────────────────────────────────
+    ensure_unit_folders(uf)
+
+    # ── Resolve paths ─────────────────────────────────────────────────────────
+    json_path      = f"{JSON_DIR}/{uf}/{saved_id}.json"
+    img_base_path  = f"{IMAGES_DIR}/{uf}"
+
+    # ── Collect images ────────────────────────────────────────────────────────
     images_to_upload = []
 
-    def add_image(image_bytes, filename):
+    def queue_image(image_bytes, filename):
         if image_bytes:
-            images_to_upload.append({"filename": filename, "bytes": image_bytes})
+            images_to_upload.append({
+                "path":  f"{img_base_path}/{filename}",
+                "bytes": image_bytes,
+                "name":  filename,
+            })
 
     if q_img_on and q_img_bytes:
-        add_image(q_img_bytes, f"{saved_id}_q.jpg")
-    if options_final and qtype not in ("Numerical","Fill in the Blank","Assertion-Reason"):
+        queue_image(q_img_bytes, f"{saved_id}_q.jpg")
+
+    if options_final and qtype not in ("Numerical", "Fill in the Blank", "Assertion-Reason"):
         for opt in st.session_state.options:
             if opt.get("img_bytes"):
-                add_image(opt["img_bytes"], f"{saved_id}_opt_{opt['id']}.jpg")
-    if expl_img_on and expl_img_bytes:
-        add_image(expl_img_bytes, f"{saved_id}_expl.jpg")
+                queue_image(opt["img_bytes"], f"{saved_id}_opt_{opt['id']}.jpg")
 
+    if expl_img_on and expl_img_bytes:
+        queue_image(expl_img_bytes, f"{saved_id}_expl.jpg")
+
+    # ── Build question block ──────────────────────────────────────────────────
     final_q_block = {"text": question_text}
     if q_eq_on and q_eq_val.strip():
         final_q_block["equation"] = q_eq_val
     if q_img_on and q_img_bytes:
-        final_q_block["image"] = f"images/{saved_id}_q.jpg"
+        final_q_block["image"] = f"images/{uf}/{saved_id}_q.jpg"
 
     if qtype == "Assertion-Reason":
-        final_q_block.update(extra_data); final_q_block["options"] = options_final; final_q_block["correct_answer"] = correct_answer
+        final_q_block.update(extra_data)
+        final_q_block["options"]        = options_final
+        final_q_block["correct_answer"] = correct_answer
     elif qtype == "Match the Following":
-        final_q_block.update(extra_data); final_q_block["options"] = options_final; final_q_block["correct_answer"] = correct_answer
+        final_q_block.update(extra_data)
+        final_q_block["options"]        = options_final
+        final_q_block["correct_answer"] = correct_answer
     elif qtype == "Passage-Based":
-        final_q_block["passage"] = passage_text; final_q_block["options"] = options_final; final_q_block["correct_answer"] = correct_answer
+        final_q_block["passage"]        = passage_text
+        final_q_block["options"]        = options_final
+        final_q_block["correct_answer"] = correct_answer
     elif qtype == "Numerical":
-        final_q_block["correct_answer"] = correct_answer; final_q_block["answer_type"] = "numerical"
+        final_q_block["correct_answer"] = correct_answer
+        final_q_block["answer_type"]    = "numerical"
     elif qtype == "Sequence Arrangement":
-        final_q_block.update(extra_data); final_q_block["options"] = options_final; final_q_block["correct_answer"] = correct_answer
+        final_q_block.update(extra_data)
+        final_q_block["options"]        = options_final
+        final_q_block["correct_answer"] = correct_answer
     elif qtype == "True/False":
-        final_q_block["options"] = options_final; final_q_block["correct_answer"] = correct_answer
+        final_q_block["options"]        = options_final
+        final_q_block["correct_answer"] = correct_answer
     elif qtype == "Fill in the Blank":
-        final_q_block["correct_answer"] = correct_answer; final_q_block["answer_type"] = "text"
+        final_q_block["correct_answer"] = correct_answer
+        final_q_block["answer_type"]    = "text"
     else:
-        final_q_block["options"] = options_final; final_q_block["correct_answer"] = correct_answer
+        final_q_block["options"]        = options_final
+        final_q_block["correct_answer"] = correct_answer
 
-    if options_final and qtype not in ("Numerical","Fill in the Blank","Assertion-Reason"):
+    # Attach image paths to individual options
+    if options_final and qtype not in ("Numerical", "Fill in the Blank", "Assertion-Reason"):
         for opt in st.session_state.options:
             if opt.get("img_bytes"):
                 for of in final_q_block.get("options", []):
                     if of["id"] == opt["id"]:
-                        of["image"] = f"images/{saved_id}_opt_{opt['id']}.jpg"
+                        of["image"] = f"images/{uf}/{saved_id}_opt_{opt['id']}.jpg"
                         break
 
+    # ── Build solution block ──────────────────────────────────────────────────
     final_expl_block = {"text": explanation}
     if expl_eq_on and expl_eq_val.strip():
         final_expl_block["equation"] = expl_eq_val
     if expl_img_on and expl_img_bytes:
-        final_expl_block["image"] = f"images/{saved_id}_expl.jpg"
+        final_expl_block["image"] = f"images/{uf}/{saved_id}_expl.jpg"
 
-    now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # ── Assemble final JSON ───────────────────────────────────────────────────
+    now_utc    = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     final_data = {
-        "question_id": saved_id,
-        "exam": {"year": int(year), "session": session, "shift": shift.split(" ")[0]},
+        "question_id":    saved_id,
+        "exam":           {"year": int(year), "session": session, "shift": shift.split(" ")[0]},
         "classification": {"unit": unit, "topic": topic, "subtopic": subtopic,
                            "question_type": qtype, "difficulty": difficulty},
-        "question": final_q_block,
-        "solution": final_expl_block,
-        "concepts": {"tags": tags_list, "keywords": keywords_list},
-        "retrieval": {"embedding_text": question_text},
-        "meta": {"created_at": now_utc, "version": "3.0"},
+        "question":       final_q_block,
+        "solution":       final_expl_block,
+        "concepts":       {"tags": tags_list, "keywords": keywords_list},
+        "retrieval":      {"embedding_text": question_text},
+        "meta":           {"created_at": now_utc, "version": "3.0"},
     }
 
+    # ── Upload JSON ───────────────────────────────────────────────────────────
     json_bytes = json.dumps(final_data, indent=2, ensure_ascii=False).encode("utf-8")
-    json_path = f"{DATA_DIR}/{saved_id}.json"
-    success = upload_to_github(json_bytes, json_path, f"Add JSON for {saved_id}")
+    success    = upload_to_github(json_bytes, json_path, f"Add JSON: {saved_id}")
+
     if success:
+        # ── Upload images ─────────────────────────────────────────────────────
         for img in images_to_upload:
-            img_path = f"{DATA_DIR}/images/{img['filename']}"
-            upload_to_github(img["bytes"], img_path, f"Add image for {saved_id}")
+            upload_to_github(img["bytes"], img["path"], f"Add image: {img['name']}")
+
         st.session_state.history.append({
-            "id": saved_id,
-            "type": qtype,
+            "id":         saved_id,
+            "unit":       unit,
+            "type":       qtype,
             "difficulty": difficulty,
-            "json": final_data,
+            "json":       final_data,
         })
-        st.success(f"✅ Saved — {saved_id}")
+        st.success(f"✅ Saved → json/{uf}/{saved_id}.json")
+        if images_to_upload:
+            st.info(f"🖼 {len(images_to_upload)} image(s) → images/{uf}/")
     else:
         st.error("❌ Failed to save to GitHub. Check token and repository settings.")
 
@@ -886,7 +872,6 @@ with save_col:
     st.button("💾  Save", key="save_btn", on_click=do_save, use_container_width=True)
 
 # ─────────────────────────────────────────────────────────────────────────────
-
 # SESSION HISTORY
 if st.session_state.history:
     st.markdown('<hr class="section-divider-heavy">', unsafe_allow_html=True)
@@ -898,12 +883,13 @@ if st.session_state.history:
         unsafe_allow_html=True,
     )
     clr_col.button("🗑 Clear", key="clear_hist", on_click=cb_clear_history)
-    
+
     for idx, item in enumerate(reversed(st.session_state.history)):
         num = len(st.session_state.history) - idx
-        # Use a simple expander without any custom CSS interference
+        uf  = unit_to_folder(item.get("unit", "Unknown"))
         with st.expander(f"#{num} · {item['id']}", expanded=False):
-            st.write(f"**File:** `{item['id']}.json`")
+            st.write(f"**Unit:** {item.get('unit', '—')}")
+            st.write(f"**File:** `json/{uf}/{item['id']}.json`")
             st.write(f"**Type:** {item['type']}  ·  **Difficulty:** {item['difficulty']}")
 
 st.markdown(
