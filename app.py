@@ -261,29 +261,52 @@ div[data-testid="stRadio"] label { font-size: 13px !important; }
     font-size: 13px;
 }
 
-/* Fix expander label text overlap */
+/* Fix expander label text overlap — robust, no cache class dependency */
+div[data-testid="stExpander"] details {
+    overflow: hidden !important;
+}
 div[data-testid="stExpander"] details summary {
     display: flex !important;
     align-items: center !important;
+    gap: 8px !important;
     overflow: hidden !important;
+    position: relative !important;
+    padding: 10px 14px !important;
+    list-style: none !important;
+    cursor: pointer !important;
 }
-div[data-testid="stExpander"] details summary p,
-div[data-testid="stExpander"] details summary span {
+div[data-testid="stExpander"] details summary::-webkit-details-marker {
+    display: none !important;
+}
+div[data-testid="stExpander"] details summary * {
+    position: static !important;
+    transform: none !important;
     overflow: hidden !important;
     text-overflow: ellipsis !important;
     white-space: nowrap !important;
-    position: static !important;
-    font-size: 14px !important;
+    font-size: 13.5px !important;
     font-weight: 500 !important;
     color: #374151 !important;
+    font-family: 'DM Sans', sans-serif !important;
+    /* Kill any negative margins or absolute offsets */
+    margin-left: 0 !important;
+    left: auto !important;
+    top: auto !important;
 }
+/* Prevent ANY pseudo-element from generating overlay text */
+div[data-testid="stExpander"] details summary *::before,
+div[data-testid="stExpander"] details summary *::after,
 div[data-testid="stExpander"] details summary::before,
 div[data-testid="stExpander"] details summary::after {
+    content: none !important;
     display: none !important;
 }
-div[data-testid="stExpander"] details > summary > * {
-    position: static !important;
-    transform: none !important;
+/* Stable chevron replacement using SVG background — no pseudo content */
+div[data-testid="stExpander"] details summary svg {
+    flex-shrink: 0 !important;
+    width: 16px !important;
+    height: 16px !important;
+    color: #9ca3af !important;
 }
 </style>
 """, unsafe_allow_html=True)
