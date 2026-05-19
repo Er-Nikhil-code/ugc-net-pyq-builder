@@ -895,23 +895,16 @@ with save_col:
 # SESSION HISTORY
 if st.session_state.history:
     st.markdown('<hr class="section-divider-heavy">', unsafe_allow_html=True)
-    hdr_col, clr_col = st.columns([4,1])
-    hdr_col.markdown(
-        f"<p class='field-label'>Session History "
-        f"<span style='font-weight:400;color:#b0b0b0;text-transform:none;letter-spacing:0'>"
-        f"({len(st.session_state.history)} saved)</span></p>",
-        unsafe_allow_html=True,
-    )
-    clr_col.button("🗑 Clear", key="clear_hist", on_click=cb_clear_history)
+    
+    # Header row
+    col1, col2 = st.columns([4, 1])
+    col1.markdown(f"<p class='field-label'>Session History <span style='font-weight:400;color:#b0b0b0;text-transform:none;letter-spacing:0'>({len(st.session_state.history)} saved)</span></p>", unsafe_allow_html=True)
+    col2.button("🗑 Clear", key="clear_hist", on_click=cb_clear_history)
+    
+    # Display each history item in an expander
     for idx, item in enumerate(reversed(st.session_state.history)):
         num = len(st.session_state.history) - idx
-        with st.expander(f"#{num} · {item['id']}"):
-            col1, col2 = st.columns(2)
-            col1.markdown(f"**File:** `{item['id']}.json`")
-            col2.markdown(f"**Type:** {item['type']}  ·  **Difficulty:** {item['difficulty']}")
-
-st.markdown(
-    "<div style='margin-top:40px;text-align:center;font-size:11px;color:#d1d5db;letter-spacing:0.5px'>"
-    "UGC NET Paper 1 · PYQ JSON Builder developed by Nikhil</div>",
-    unsafe_allow_html=True,
-)
+        # Use a unique key for each expander
+        with st.expander(f"#{num} · {item['id']}", expanded=False):
+            st.write(f"**File:** `{item['id']}.json`")
+            st.write(f"**Type:** {item['type']}  ·  **Difficulty:** {item['difficulty']}")
