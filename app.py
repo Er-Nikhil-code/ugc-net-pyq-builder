@@ -696,7 +696,7 @@ else:
     if expl_eq_on  and expl_eq_val.strip(): st.latex(expl_eq_val)
     if expl_img_on and expl_img_file:       st.image(expl_img_file, width=300)
 
-with st.expander("View JSON", expanded=False):
+with st.expander("📄 View JSON", expanded=False):
     st.code(json_preview_str, language="json")
 
 # ─────────────────────────────────────────────────────────────────────────────
