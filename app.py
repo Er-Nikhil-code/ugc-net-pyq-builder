@@ -266,7 +266,6 @@ div[data-testid="stCheckbox"] label {
 }
 div[data-testid="stRadio"] label { font-size: 13px !important; }
 
-/* Preview empty state */
 .preview-empty {
     background: #fafafa;
     border: 1.5px dashed #e5e7eb;
@@ -277,54 +276,44 @@ div[data-testid="stRadio"] label { font-size: 13px !important; }
     font-size: 13px;
 }
 
-/* Fix expander label text overlap — robust, no cache class dependency */
-div[data-testid="stExpander"] details {
+/* Hide broken Material Icons span (renders as "oar" / "keyboard_arrow_right") */
+div[data-testid="stExpander"] details summary > span:first-of-type {
+    display: none !important;
+    visibility: hidden !important;
+    width: 0 !important;
     overflow: hidden !important;
+    font-size: 0 !important;
+    opacity: 0 !important;
 }
+
+/* Clean CSS-only chevron replacement */
 div[data-testid="stExpander"] details summary {
+    list-style: none !important;
     display: flex !important;
     align-items: center !important;
-    gap: 8px !important;
-    overflow: hidden !important;
-    position: relative !important;
+    gap: 10px !important;
     padding: 10px 14px !important;
-    list-style: none !important;
     cursor: pointer !important;
 }
 div[data-testid="stExpander"] details summary::-webkit-details-marker {
     display: none !important;
 }
-div[data-testid="stExpander"] details summary * {
-    position: static !important;
-    transform: none !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-    white-space: nowrap !important;
-    font-size: 13.5px !important;
-    font-weight: 500 !important;
-    color: #374151 !important;
+div[data-testid="stExpander"] details summary::before {
+    content: '›' !important;
+    font-size: 20px !important;
     font-family: 'DM Sans', sans-serif !important;
-    /* Kill any negative margins or absolute offsets */
-    margin-left: 0 !important;
-    left: auto !important;
-    top: auto !important;
-}
-/* Prevent ANY pseudo-element from generating overlay text */
-div[data-testid="stExpander"] details summary *::before,
-div[data-testid="stExpander"] details summary *::after,
-div[data-testid="stExpander"] details summary::before,
-div[data-testid="stExpander"] details summary::after {
-    content: none !important;
-    display: none !important;
-}
-/* Stable chevron replacement using SVG background — no pseudo content */
-div[data-testid="stExpander"] details summary svg {
-    flex-shrink: 0 !important;
-    width: 16px !important;
-    height: 16px !important;
     color: #9ca3af !important;
+    line-height: 1 !important;
+    display: inline-block !important;
+    transition: transform 0.2s ease !important;
+    transform: rotate(0deg) !important;
+    flex-shrink: 0 !important;
+}
+div[data-testid="stExpander"] details[open] summary::before {
+    transform: rotate(90deg) !important;
 }
 </style>
+""", unsafe_allow_html=True)</style>
 """, unsafe_allow_html=True)
 
 # ── Constants ─────────────────────────────────────────────────────────────────
