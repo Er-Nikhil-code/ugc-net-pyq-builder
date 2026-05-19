@@ -250,7 +250,6 @@ div[data-testid="stCheckbox"] label {
 }
 div[data-testid="stRadio"] label { font-size: 13px !important; }
 
-/* Preview empty state */
 .preview-empty {
     background: #fafafa;
     border: 1.5px dashed #e5e7eb;
@@ -259,6 +258,31 @@ div[data-testid="stRadio"] label { font-size: 13px !important; }
     text-align: center;
     color: #c0c0c0;
     font-size: 13px;
+}
+
+/* Fix expander label text overlap */
+div[data-testid="stExpander"] details summary {
+    display: flex !important;
+    align-items: center !important;
+    overflow: hidden !important;
+}
+div[data-testid="stExpander"] details summary p,
+div[data-testid="stExpander"] details summary span {
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    position: static !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    color: #374151 !important;
+}
+div[data-testid="stExpander"] details summary::before,
+div[data-testid="stExpander"] details summary::after {
+    display: none !important;
+}
+div[data-testid="stExpander"] details > summary > * {
+    position: static !important;
+    transform: none !important;
 }
 </style>
 """, unsafe_allow_html=True)
