@@ -4,6 +4,7 @@ UGC NET Paper 1 — PYQ JSON Builder v3.0 (GitHub Storage)
 - Counter stored in data/counter.json
 - Session history loaded from GitHub at startup
 - Works on Streamlit Cloud (no local file writes)
+- Automatically creates data/ and data/images/ folders
 """
 
 import streamlit as st
@@ -26,9 +27,9 @@ REPO_OWNER = "Er-Nikhil-code"          # Your GitHub username
 REPO_NAME = "ugc-net-pyq-builder"      # Your repository name
 DATA_DIR = "data"                      # Folder where all data will be stored
 
-# ── Helper: Upload file to GitHub (from bytes) ───────────────────────────────
+# ── Helper: Upload file to GitHub (with detailed error reporting) ─────────────
 def upload_to_github(file_bytes, repo_path, commit_message):
-    """Upload a file (bytes) to GitHub repository."""
+    """Upload a file (bytes) to GitHub repository. Returns True on success."""
     url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{repo_path}"
     headers = {
         "Authorization": f"token {GITHUB_TOKEN}",
@@ -39,6 +40,9 @@ def upload_to_github(file_bytes, repo_path, commit_message):
     resp = requests.get(url, headers=headers)
     if resp.status_code == 200:
         sha = resp.json()["sha"]
+    elif resp.status_code != 404:
+        st.error(f"GitHub GET error: {resp.status_code} - {resp.text}")
+        return False
     
     content_b64 = base64.b64encode(file_bytes).decode("utf-8")
     payload = {
@@ -50,7 +54,30 @@ def upload_to_github(file_bytes, repo_path, commit_message):
         payload["sha"] = sha
     
     response = requests.put(url, headers=headers, json=payload)
-    return response.status_code in [200, 201]
+    if response.status_code in [200, 201]:
+        return True
+    else:
+        st.error(f"GitHub PUT error: {response.status_code} - {response.text}")
+        return False
+
+# ── Helper: Ensure data/images folder exists (create .gitkeep if needed) ──────
+def ensure_data_folders():
+    """Create data/ and data/images/ folders if they don't exist."""
+    # Check if data/ folder exists by listing it
+    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{DATA_DIR}"
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    resp = requests.get(url, headers=headers)
+    if resp.status_code == 404:
+        # Create data/ folder by uploading a .gitkeep file
+        upload_to_github(b"", f"{DATA_DIR}/.gitkeep", "Create data folder")
+    # Now check data/images/
+    url_images = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{DATA_DIR}/images"
+    resp_images = requests.get(url_images, headers=headers)
+    if resp_images.status_code == 404:
+        upload_to_github(b"", f"{DATA_DIR}/images/.gitkeep", "Create images folder")
+
+# ── Call ensure_data_folders() at startup ─────────────────────────────────────
+ensure_data_folders()
 
 # ── Helper: Read file from GitHub (returns decoded text or None) ─────────────
 def read_from_github(repo_path):
@@ -264,7 +291,7 @@ def cb_add_option():
     idx = len(st.session_state.options)
     st.session_state.options.append({
         "id": chr(65+idx) if idx < 26 else str(idx+1),
-        "text":"","eq":"","eq_on":False,"img_on":False,"img":None
+        "text":"","eq":"","eq_on":False,"img_on":False,"img_bytes":None
     })
 
 def cb_remove_option(idx):
@@ -287,18 +314,19 @@ def cb_remove_seq_item():
 def cb_clear_history():
     st.session_state.history = []
 
-# ── Session state init ────────────────────────────────────────────────────────
-def _ss(k, v):
-    if k not in st.session_state: st.session_state[k] = v
+# ── Session state init (robust) ──────────────────────────────────────────────
+def _ss(key, val):
+    if key not in st.session_state:
+        st.session_state[key] = val
 
 _ss("match_rows", 4)
 _ss("seq_items",  4)
 _ss("history",    load_history_from_github())   # Load from GitHub on start
 _ss("options", [
-    {"id":"A","text":"","eq":"","eq_on":False,"img_on":False,"img":None},
-    {"id":"B","text":"","eq":"","eq_on":False,"img_on":False,"img":None},
-    {"id":"C","text":"","eq":"","eq_on":False,"img_on":False,"img":None},
-    {"id":"D","text":"","eq":"","eq_on":False,"img_on":False,"img":None},
+    {"id":"A","text":"","eq":"","eq_on":False,"img_on":False,"img_bytes":None},
+    {"id":"B","text":"","eq":"","eq_on":False,"img_on":False,"img_bytes":None},
+    {"id":"C","text":"","eq":"","eq_on":False,"img_on":False,"img_bytes":None},
+    {"id":"D","text":"","eq":"","eq_on":False,"img_on":False,"img_bytes":None},
 ])
 _ss("prev_qtype",      None)
 _ss("current_correct", "A")
@@ -307,10 +335,10 @@ _ss("_last_saved_id",  None)
 def maybe_reset_options(qtype):
     if st.session_state.prev_qtype != qtype:
         st.session_state.options = [
-            {"id":"A","text":"","eq":"","eq_on":False,"img_on":False,"img":None},
-            {"id":"B","text":"","eq":"","eq_on":False,"img_on":False,"img":None},
-            {"id":"C","text":"","eq":"","eq_on":False,"img_on":False,"img":None},
-            {"id":"D","text":"","eq":"","eq_on":False,"img_on":False,"img":None},
+            {"id":"A","text":"","eq":"","eq_on":False,"img_on":False,"img_bytes":None},
+            {"id":"B","text":"","eq":"","eq_on":False,"img_on":False,"img_bytes":None},
+            {"id":"C","text":"","eq":"","eq_on":False,"img_on":False,"img_bytes":None},
+            {"id":"D","text":"","eq":"","eq_on":False,"img_on":False,"img_bytes":None},
         ]
         st.session_state.match_rows     = 4
         st.session_state.seq_items      = 4
@@ -354,7 +382,7 @@ st.markdown(
 # ─────────────────────────────────────────────────────────────────────────────
 # HELPER FUNCTIONS
 def render_q_toggles(eq_key, img_key):
-    """Equation + Image toggles for question. Returns (eq_on, eq_val, img_on, img_file_bytes)."""
+    """Equation + Image toggles for question. Returns (eq_on, eq_val, img_on, img_bytes)."""
     tq1, tq2 = st.columns([1, 5])
     eq_on  = tq1.checkbox("＋ Equation", key=f"q_eq_toggle_{eq_key}")
     img_on = tq2.checkbox("＋ Image",    key=f"q_img_toggle_{img_key}")
@@ -876,6 +904,7 @@ def do_save():
     else:
         st.error("❌ Failed to save to GitHub. Check token and repository settings.")
         # Do not call st.rerun() here
+
 # Stash current values for callback (not really needed now, but kept for consistency)
 _, save_col = st.columns([5,1])
 with save_col:
