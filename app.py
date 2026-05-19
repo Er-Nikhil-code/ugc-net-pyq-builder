@@ -1,18 +1,16 @@
 """
-UGC NET Paper 1 — PYQ JSON Builder v3.0
-Clean, elegant redesign:
-  - Option label (A. B. C. D.) is inline with the text input, not above it
-  - "Question" label appears before the question textarea
-  - Divider line before the options section
-  - Refined typography and spacing
-  - on_click callbacks to prevent scroll-to-top
-  - Fixed empty label warnings and datetime deprecation
+UGC NET Paper 1 — PYQ JSON Builder v3.0 (GitHub Storage)
+- All JSON and images saved to GitHub repository (data/ folder)
+- Counter stored in data/counter.json
+- Session history loaded from GitHub at startup
+- Works on Streamlit Cloud (no local file writes)
 """
 
 import streamlit as st
 import json
+import base64
+import requests
 from datetime import datetime, timezone
-from pathlib import Path
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -22,7 +20,104 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# ── CSS (unchanged) ───────────────────────────────────────────────────────────
+# ── GitHub API Configuration (from secrets) ───────────────────────────────────
+GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
+REPO_OWNER = "Er-Nikhil-code"          # Your GitHub username
+REPO_NAME = "ugc-net-pyq-builder"      # Your repository name
+DATA_DIR = "data"                      # Folder where all data will be stored
+
+# ── Helper: Upload file to GitHub (from bytes) ───────────────────────────────
+def upload_to_github(file_bytes, repo_path, commit_message):
+    """Upload a file (bytes) to GitHub repository."""
+    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{repo_path}"
+    headers = {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3+json",
+    }
+    # Get current SHA if file exists (for update)
+    sha = None
+    resp = requests.get(url, headers=headers)
+    if resp.status_code == 200:
+        sha = resp.json()["sha"]
+    
+    content_b64 = base64.b64encode(file_bytes).decode("utf-8")
+    payload = {
+        "message": commit_message,
+        "content": content_b64,
+        "branch": "main",
+    }
+    if sha:
+        payload["sha"] = sha
+    
+    response = requests.put(url, headers=headers, json=payload)
+    return response.status_code in [200, 201]
+
+# ── Helper: Read file from GitHub (returns decoded text or None) ─────────────
+def read_from_github(repo_path):
+    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{repo_path}"
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    resp = requests.get(url, headers=headers)
+    if resp.status_code == 200:
+        content_b64 = resp.json()["content"]
+        return base64.b64decode(content_b64).decode("utf-8")
+    return None
+
+# ── Helper: List files in a GitHub folder ────────────────────────────────────
+def list_files_in_github_folder(folder_path):
+    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{folder_path}"
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    resp = requests.get(url, headers=headers)
+    if resp.status_code == 200:
+        return resp.json()  # list of file objects
+    return []
+
+# ── Counter management using GitHub (stored in data/counter.json) ────────────
+def _read_ctr():
+    try:
+        content = read_from_github(f"{DATA_DIR}/counter.json")
+        if content:
+            return int(json.loads(content).get("counter", 0))
+    except Exception:
+        pass
+    return 0
+
+def _write_ctr(n):
+    data = json.dumps({"counter": n}, indent=2)
+    upload_to_github(data.encode("utf-8"), f"{DATA_DIR}/counter.json", "Update counter")
+    return n
+
+def peek_next():
+    return _read_ctr() + 1
+
+def incr_ctr():
+    n = _read_ctr() + 1
+    _write_ctr(n)
+    return n
+
+def make_qid(year, session, shift, ctr=None):
+    sc = "M" if "M" in shift else ("E" if "E" in shift else "NA")
+    base = f"UGCNET_P1_{year}_{session}_{sc}"
+    return f"{base}_{int(ctr):04d}" if ctr else base
+
+# ── Load session history from GitHub (all JSON files in data/ except counter) ─
+def load_history_from_github():
+    history = []
+    files = list_files_in_github_folder(DATA_DIR)
+    for file in files:
+        if file["name"].endswith(".json") and file["name"] != "counter.json":
+            resp = requests.get(file["download_url"])
+            if resp.status_code == 200:
+                data = resp.json()
+                history.append({
+                    "id": data["question_id"],
+                    "type": data["classification"]["question_type"],
+                    "difficulty": data["classification"]["difficulty"],
+                    "json": data,
+                })
+    history.sort(key=lambda x: x["id"])
+    return history
+
+# ── CSS (unchanged from your design) ─────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
@@ -156,44 +251,6 @@ AR_OPTS  = [
     {"id":"D","text":"Assertion (A) is false but Reason (R) is true."},
 ]
 
-SCRIPT_DIR   = Path(__file__).parent.absolute()
-COUNTER_FILE = SCRIPT_DIR / "qid_counter.json"
-
-# ── Counter helpers ───────────────────────────────────────────────────────────
-def _read_ctr():
-    try:
-        if COUNTER_FILE.exists():
-            return int(json.load(open(COUNTER_FILE)).get("counter", 0))
-    except Exception:
-        pass
-    return 0
-
-def _write_ctr(n):
-    try:
-        json.dump({"counter": int(n)}, open(COUNTER_FILE, "w"))
-    except Exception:
-        pass
-
-def peek_next(): return _read_ctr() + 1
-
-def incr_ctr():
-    n = _read_ctr() + 1; _write_ctr(n); return n
-
-def make_qid(year, session, shift, ctr=None):
-    sc   = "M" if "M" in shift else ("E" if "E" in shift else "NA")
-    base = f"UGCNET_P1_{year}_{session}_{sc}"
-    return f"{base}_{int(ctr):04d}" if ctr else base
-
-def save_image(img_file, unit_folder, qid, prefix):
-    if img_file is None: return None
-    images_dir = unit_folder / "images"
-    images_dir.mkdir(parents=True, exist_ok=True)
-    ext       = Path(img_file.name).suffix
-    safe_name = f"{qid}_{prefix}{ext}"
-    with open(images_dir / safe_name, "wb") as f:
-        f.write(img_file.getbuffer())
-    return f"images/{safe_name}"
-
 # ── Callbacks (on_click → no scroll-to-top) ──────────────────────────────────
 def _reindex_options():
     opts = st.session_state.options
@@ -236,7 +293,7 @@ def _ss(k, v):
 
 _ss("match_rows", 4)
 _ss("seq_items",  4)
-_ss("history",    [])
+_ss("history",    load_history_from_github())   # Load from GitHub on start
 _ss("options", [
     {"id":"A","text":"","eq":"","eq_on":False,"img_on":False,"img":None},
     {"id":"B","text":"","eq":"","eq_on":False,"img_on":False,"img":None},
@@ -297,17 +354,20 @@ st.markdown(
 # ─────────────────────────────────────────────────────────────────────────────
 # HELPER FUNCTIONS
 def render_q_toggles(eq_key, img_key):
-    """Equation + Image toggles for question. Returns (eq_on, eq_val, img_on, img_file)."""
+    """Equation + Image toggles for question. Returns (eq_on, eq_val, img_on, img_file_bytes)."""
     tq1, tq2 = st.columns([1, 5])
     eq_on  = tq1.checkbox("＋ Equation", key=f"q_eq_toggle_{eq_key}")
     img_on = tq2.checkbox("＋ Image",    key=f"q_img_toggle_{img_key}")
-    eq_val = ""; img_file = None
+    eq_val = ""; img_bytes = None
     if eq_on:
         eq_val = st.text_input("LaTeX equation", placeholder=r"\frac{a+b}{c}", key=f"q_eq_val_{eq_key}")
         if eq_val.strip(): st.latex(eq_val)
     if img_on:
-        img_file = st.file_uploader("Question image", type=["png","jpg","jpeg"], key=f"q_img_{img_key}")
-    return eq_on, eq_val, img_on, img_file
+        uploaded = st.file_uploader("Question image", type=["png","jpg","jpeg"], key=f"q_img_{img_key}")
+        if uploaded:
+            img_bytes = uploaded.getvalue()
+            st.image(uploaded, width=300)
+    return eq_on, eq_val, img_on, img_bytes
 
 def render_options_grid(opts, qtype_key):
     """Each option row: [badge A] [text input] [Eq ☐] [Img ☐] [✕]"""
@@ -340,11 +400,15 @@ def render_options_grid(opts, qtype_key):
             )
             if opt["eq"].strip(): st.latex(opt["eq"])
         if opt["img_on"]:
-            opt["img"] = st.file_uploader(
+            uploaded = st.file_uploader(
                 f"Image for {opt['id']}", type=["png","jpg","jpeg"],
                 key=f"opt_img_{qtype_key}_{idx}",
             )
-            if opt["img"]: st.image(opt["img"], width=120)
+            if uploaded:
+                opt["img_bytes"] = uploaded.getvalue()
+                st.image(uploaded, width=120)
+            else:
+                opt["img_bytes"] = None
 
         st.markdown("<div style='height:2px'></div>", unsafe_allow_html=True)
 
@@ -355,7 +419,7 @@ st.markdown('<hr class="section-divider-heavy">', unsafe_allow_html=True)
 question_text = ""
 passage_text  = ""
 q_eq_on = q_img_on = False
-q_eq_val = ""; q_img_file = None
+q_eq_val = ""; q_img_bytes = None
 extra_data    = {}
 options_final = []
 
@@ -363,7 +427,7 @@ if qtype == "MCQ":
     st.markdown('<p class="field-label">Question</p>', unsafe_allow_html=True)
     question_text = st.text_area("Question text", height=90, placeholder="Enter your question here…",
                                  label_visibility="collapsed", key="q_text_mcq")
-    q_eq_on, q_eq_val, q_img_on, q_img_file = render_q_toggles("mcq","mcq")
+    q_eq_on, q_eq_val, q_img_on, q_img_bytes = render_q_toggles("mcq","mcq")
 
     st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
     st.markdown('<p class="field-label">Options</p>', unsafe_allow_html=True)
@@ -371,7 +435,7 @@ if qtype == "MCQ":
     st.button("＋  Add Option", key="add_opt_mcq", on_click=cb_add_option, use_container_width=True)
 
     options_final = [
-        {"id":o["id"],"text":o["text"],"equation":o.get("eq",""),"has_image":o.get("img") is not None}
+        {"id":o["id"],"text":o["text"],"equation":o.get("eq",""),"has_image":o.get("img_bytes") is not None}
         for o in st.session_state.options
     ]
 
@@ -382,7 +446,7 @@ elif qtype == "Assertion-Reason":
     st.markdown('<p class="field-label">Reason (R)</p>', unsafe_allow_html=True)
     ar_r = st.text_area("Reason (R)",    height=80, placeholder="Write the reason…",    label_visibility="collapsed", key="ar_r")
     question_text = f"Assertion (A): {ar_a}\nReason (R): {ar_r}"
-    q_eq_on, q_eq_val, q_img_on, q_img_file = render_q_toggles("ar","ar")
+    q_eq_on, q_eq_val, q_img_on, q_img_bytes = render_q_toggles("ar","ar")
 
     st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
     st.markdown('<p class="field-label">Options (standard)</p>', unsafe_allow_html=True)
@@ -402,7 +466,7 @@ elif qtype == "Match the Following":
         "Question stem", value="Match the items in Column A with Column B:",
         label_visibility="collapsed", key="q_match_stem"
     )
-    q_eq_on, q_eq_val, q_img_on, q_img_file = render_q_toggles("match","match")
+    q_eq_on, q_eq_val, q_img_on, q_img_bytes = render_q_toggles("match","match")
 
     st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
     st.markdown('<p class="field-label">Match Table</p>', unsafe_allow_html=True)
@@ -448,7 +512,7 @@ elif qtype == "Passage-Based":
     st.markdown('<p class="field-label">Question</p>', unsafe_allow_html=True)
     question_text = st.text_area("Question", height=90, placeholder="Question based on the passage…",
                                  label_visibility="collapsed", key="pb_qtext")
-    q_eq_on, q_eq_val, q_img_on, q_img_file = render_q_toggles("pb","pb")
+    q_eq_on, q_eq_val, q_img_on, q_img_bytes = render_q_toggles("pb","pb")
 
     st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
     st.markdown('<p class="field-label">Options</p>', unsafe_allow_html=True)
@@ -461,14 +525,14 @@ elif qtype == "Numerical":
     st.markdown('<p class="field-label">Question</p>', unsafe_allow_html=True)
     question_text = st.text_area("Numerical question", height=110, placeholder="Enter the numerical question here…",
                                  label_visibility="collapsed", key="q_text_num")
-    q_eq_on, q_eq_val, q_img_on, q_img_file = render_q_toggles("num","num")
+    q_eq_on, q_eq_val, q_img_on, q_img_bytes = render_q_toggles("num","num")
     options_final = []
 
 elif qtype == "Sequence Arrangement":
     st.markdown('<p class="field-label">Question Stem</p>', unsafe_allow_html=True)
     question_text = st.text_input("Question stem", value="Arrange the following in the correct sequence:",
                                   label_visibility="collapsed", key="q_seq_stem")
-    q_eq_on, q_eq_val, q_img_on, q_img_file = render_q_toggles("seq","seq")
+    q_eq_on, q_eq_val, q_img_on, q_img_bytes = render_q_toggles("seq","seq")
 
     st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
     st.markdown('<p class="field-label">Sequence Items</p>', unsafe_allow_html=True)
@@ -509,14 +573,14 @@ elif qtype == "True/False":
     st.markdown('<p class="field-label">Question</p>', unsafe_allow_html=True)
     question_text = st.text_area("True/False statement", height=110, placeholder="Write the statement to evaluate…",
                                  label_visibility="collapsed", key="q_text_tf")
-    q_eq_on, q_eq_val, q_img_on, q_img_file = render_q_toggles("tf","tf")
+    q_eq_on, q_eq_val, q_img_on, q_img_bytes = render_q_toggles("tf","tf")
     options_final = [{"id":"A","text":"True"},{"id":"B","text":"False"}]
 
 elif qtype == "Fill in the Blank":
     st.markdown('<p class="field-label">Question</p>', unsafe_allow_html=True)
     question_text = st.text_input("Fill in the blank", placeholder="The _____ method involves learning by doing.",
                                   label_visibility="collapsed", key="q_text_fib")
-    q_eq_on, q_eq_val, q_img_on, q_img_file = render_q_toggles("fib","fib")
+    q_eq_on, q_eq_val, q_img_on, q_img_bytes = render_q_toggles("fib","fib")
     options_final = []
 
 else:
@@ -575,12 +639,15 @@ with exp_col2:
     te1, te2 = st.columns(2)
     expl_eq_on  = te1.checkbox("＋ Equation", key="expl_eq_toggle")
     expl_img_on = te2.checkbox("＋ Image",    key="expl_img_toggle")
-    expl_eq_val = ""; expl_img_file = None
+    expl_eq_val = ""; expl_img_bytes = None
     if expl_eq_on:
         expl_eq_val = st.text_input("Explanation equation", placeholder=r"\sum_{i=1}^{n}i", key="expl_eq_val")
         if expl_eq_val.strip(): st.latex(expl_eq_val)
     if expl_img_on:
-        expl_img_file = st.file_uploader("Explanation image", type=["png","jpg","jpeg"], key="expl_img_file")
+        uploaded = st.file_uploader("Explanation image", type=["png","jpg","jpeg"], key="expl_img_file")
+        if uploaded:
+            expl_img_bytes = uploaded.getvalue()
+            st.image(uploaded, width=300)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # SECTION 4 — Metadata
@@ -609,7 +676,6 @@ else:                                q_block_preview["options"]=options_final; q
 expl_block_preview = {"text": explanation}
 if expl_eq_on and expl_eq_val.strip(): expl_block_preview["equation"] = expl_eq_val
 
-# Use timezone-aware UTC datetime
 now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 json_preview_data = {
@@ -651,7 +717,7 @@ else:
         st.markdown(f"<div style='font-size:15px;font-weight:500;color:#111;margin-bottom:12px;line-height:1.6'>{question_text}</div>", unsafe_allow_html=True)
 
     if q_eq_on  and q_eq_val.strip():  st.latex(q_eq_val)
-    if q_img_on and q_img_file:        st.image(q_img_file, width=300)
+    if q_img_on and q_img_bytes:       st.image(q_img_bytes, width=300)
 
     if qtype == "Match the Following" and extra_data.get("column_a"):
         c1, c2 = st.columns(2)
@@ -682,8 +748,10 @@ else:
                 unsafe_allow_html=True,
             )
             if opt.get("equation") and opt["equation"].strip(): st.latex(opt["equation"])
+            # Show option image if present (from session state)
             mo = next((o for o in st.session_state.options if o["id"]==opt["id"]), None)
-            if mo and mo.get("img_on") and mo.get("img"): st.image(mo["img"], width=150)
+            if mo and mo.get("img_bytes"):
+                st.image(mo["img_bytes"], width=150)
 
     if explanation.strip():
         st.markdown(
@@ -694,127 +762,131 @@ else:
             unsafe_allow_html=True
         )
     if expl_eq_on  and expl_eq_val.strip(): st.latex(expl_eq_val)
-    if expl_img_on and expl_img_file:       st.image(expl_img_file, width=300)
+    if expl_img_on and expl_img_bytes:       st.image(expl_img_bytes, width=300)
 
 with st.expander("View JSON", expanded=False):
     st.code(json_preview_str, language="json")
 
 # ─────────────────────────────────────────────────────────────────────────────
-# SAVE BUTTON
+# SAVE BUTTON (upload to GitHub)
 st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
 
 def do_save():
-    ctr      = incr_ctr()
-    _yr  = st.session_state["_sv_year"]
-    _ses = st.session_state["_sv_session"]
-    _sh  = st.session_state["_sv_shift"]
-    saved_id = make_qid(_yr, _ses, _sh, ctr)
-    st.session_state["_last_saved_id"] = saved_id
-
-    _unit  = st.session_state["_sv_unit"]
-    _topic = st.session_state["_sv_topic"]
-    _sub   = st.session_state["_sv_subtopic"]
-    _qt    = st.session_state["_sv_qtype"]
-    _diff  = st.session_state["_sv_difficulty"]
-    _qtext = st.session_state["_sv_qtext"]
-    _pass  = st.session_state["_sv_passage"]
-    _qeon  = st.session_state["_sv_q_eq_on"]
-    _qev   = st.session_state["_sv_q_eq_val"]
-    _qion  = st.session_state["_sv_q_img_on"]
-    _qimg  = st.session_state["_sv_q_img_file"]
-    _of    = st.session_state["_sv_options_final"]
-    _ca    = st.session_state["_sv_correct"]
-    _ex    = st.session_state["_sv_extra"]
-    _expl  = st.session_state["_sv_expl"]
-    _eeon  = st.session_state["_sv_expl_eq_on"]
-    _eev   = st.session_state["_sv_expl_eq_val"]
-    _eion  = st.session_state["_sv_expl_img_on"]
-    _eimg  = st.session_state["_sv_expl_img_file"]
-    _tags  = st.session_state["_sv_tags"]
-    _kw    = st.session_state["_sv_keywords"]
-
-    unit_folder = SCRIPT_DIR / _unit.strip().replace("/","_")
-    unit_folder.mkdir(parents=True, exist_ok=True)
-
-    fq = {"text": _qtext}
-    if _qeon and _qev.strip(): fq["equation"] = _qev
-    if _qion and _qimg:
-        p = save_image(_qimg, unit_folder, saved_id, "q")
-        if p: fq["image"] = p
-
-    if   _qt == "Assertion-Reason":    fq.update(_ex); fq["options"]=_of; fq["correct_answer"]=_ca
-    elif _qt == "Match the Following": fq.update(_ex); fq["options"]=_of; fq["correct_answer"]=_ca
-    elif _qt == "Passage-Based":       fq["passage"]=_pass; fq["options"]=_of; fq["correct_answer"]=_ca
-    elif _qt == "Numerical":           fq["correct_answer"]=_ca; fq["answer_type"]="numerical"
-    elif _qt == "Sequence Arrangement":fq.update(_ex); fq["options"]=_of; fq["correct_answer"]=_ca
-    elif _qt == "True/False":          fq["options"]=_of; fq["correct_answer"]=_ca
-    elif _qt == "Fill in the Blank":   fq["correct_answer"]=_ca; fq["answer_type"]="text"
-    else:                              fq["options"]=_of; fq["correct_answer"]=_ca
-
-    fe = {"text": _expl}
-    if _eeon and _eev.strip(): fe["equation"] = _eev
-    if _eion and _eimg:
-        p = save_image(_eimg, unit_folder, saved_id, "expl")
-        if p: fe["image"] = p
-
-    if _of and _qt not in ("Numerical","Fill in the Blank","Assertion-Reason"):
+    # Increment counter and create final QID
+    ctr = incr_ctr()
+    saved_id = make_qid(year, session, shift, ctr)
+    
+    # Prepare image list for upload
+    images_to_upload = []
+    
+    # Helper to add image to list if bytes exist
+    def add_image(image_bytes, filename):
+        if image_bytes:
+            images_to_upload.append({"filename": filename, "bytes": image_bytes})
+    
+    # 1. Question image
+    if q_img_on and q_img_bytes:
+        add_image(q_img_bytes, f"{saved_id}_q.jpg")
+    
+    # 2. Option images
+    if options_final and qtype not in ("Numerical","Fill in the Blank","Assertion-Reason"):
         for opt in st.session_state.options:
-            if opt.get("img_on") and opt.get("img"):
-                op = save_image(opt["img"], unit_folder, saved_id, f"opt_{opt['id']}")
-                if op:
-                    for of2 in fq.get("options",[]):
-                        if of2["id"]==opt["id"]: of2["image"]=op; break
-
-    # Use timezone-aware UTC datetime for saved file as well
+            if opt.get("img_bytes"):
+                add_image(opt["img_bytes"], f"{saved_id}_opt_{opt['id']}.jpg")
+    
+    # 3. Explanation image
+    if expl_img_on and expl_img_bytes:
+        add_image(expl_img_bytes, f"{saved_id}_expl.jpg")
+    
+    # Build final JSON data
+    final_q_block = {"text": question_text}
+    if q_eq_on and q_eq_val.strip():
+        final_q_block["equation"] = q_eq_val
+    # Note: image paths in JSON will be relative to data/images/ folder
+    if q_img_on and q_img_bytes:
+        final_q_block["image"] = f"images/{saved_id}_q.jpg"
+    
+    if qtype == "Assertion-Reason":
+        final_q_block.update(extra_data)
+        final_q_block["options"] = options_final
+        final_q_block["correct_answer"] = correct_answer
+    elif qtype == "Match the Following":
+        final_q_block.update(extra_data)
+        final_q_block["options"] = options_final
+        final_q_block["correct_answer"] = correct_answer
+    elif qtype == "Passage-Based":
+        final_q_block["passage"] = passage_text
+        final_q_block["options"] = options_final
+        final_q_block["correct_answer"] = correct_answer
+    elif qtype == "Numerical":
+        final_q_block["correct_answer"] = correct_answer
+        final_q_block["answer_type"] = "numerical"
+    elif qtype == "Sequence Arrangement":
+        final_q_block.update(extra_data)
+        final_q_block["options"] = options_final
+        final_q_block["correct_answer"] = correct_answer
+    elif qtype == "True/False":
+        final_q_block["options"] = options_final
+        final_q_block["correct_answer"] = correct_answer
+    elif qtype == "Fill in the Blank":
+        final_q_block["correct_answer"] = correct_answer
+        final_q_block["answer_type"] = "text"
+    else:
+        final_q_block["options"] = options_final
+        final_q_block["correct_answer"] = correct_answer
+    
+    # Add option image paths to options_final
+    if options_final and qtype not in ("Numerical","Fill in the Blank","Assertion-Reason"):
+        for opt in st.session_state.options:
+            if opt.get("img_bytes"):
+                for of in final_q_block.get("options", []):
+                    if of["id"] == opt["id"]:
+                        of["image"] = f"images/{saved_id}_opt_{opt['id']}.jpg"
+                        break
+    
+    final_expl_block = {"text": explanation}
+    if expl_eq_on and expl_eq_val.strip():
+        final_expl_block["equation"] = expl_eq_val
+    if expl_img_on and expl_img_bytes:
+        final_expl_block["image"] = f"images/{saved_id}_expl.jpg"
+    
     now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
     final_data = {
         "question_id": saved_id,
-        "exam": {"year":int(_yr),"session":_ses,"shift":_sh.split(" ")[0]},
-        "classification": {"unit":_unit,"topic":_topic,"subtopic":_sub,"question_type":_qt,"difficulty":_diff},
-        "question": fq, "solution": fe,
-        "concepts": {"tags":_tags,"keywords":_kw},
-        "retrieval": {"embedding_text":_qtext},
-        "meta": {"created_at":now_utc,"version":"3.0"},
+        "exam": {"year": int(year), "session": session, "shift": shift.split(" ")[0]},
+        "classification": {"unit": unit, "topic": topic, "subtopic": subtopic,
+                           "question_type": qtype, "difficulty": difficulty},
+        "question": final_q_block,
+        "solution": final_expl_block,
+        "concepts": {"tags": tags_list, "keywords": keywords_list},
+        "retrieval": {"embedding_text": question_text},
+        "meta": {"created_at": now_utc, "version": "3.0"},
     }
-    saved_str = json.dumps(final_data, indent=2, ensure_ascii=False)
-    st.session_state.history.append({"id":saved_id,"type":_qt,"difficulty":_diff,"json":saved_str})
-    with open(unit_folder/f"{saved_id}.json","w",encoding="utf-8") as f:
-        f.write(saved_str)
+    
+    # Upload JSON and images to GitHub
+    json_bytes = json.dumps(final_data, indent=2, ensure_ascii=False).encode("utf-8")
+    json_path = f"{DATA_DIR}/{saved_id}.json"
+    success = upload_to_github(json_bytes, json_path, f"Add JSON for {saved_id}")
+    if success:
+        for img in images_to_upload:
+            img_path = f"{DATA_DIR}/images/{img['filename']}"
+            upload_to_github(img["bytes"], img_path, f"Add image for {saved_id}")
+        st.session_state.history.append({
+            "id": saved_id,
+            "type": qtype,
+            "difficulty": difficulty,
+            "json": final_data,
+        })
+        st.success(f"✅ Saved — {saved_id}")
+    else:
+        st.error("❌ Failed to save to GitHub. Check token and repository settings.")
+    
+    st.rerun()
 
-# Stash current form values for the callback
-st.session_state["_sv_year"]          = year
-st.session_state["_sv_session"]       = session
-st.session_state["_sv_shift"]         = shift
-st.session_state["_sv_unit"]          = unit
-st.session_state["_sv_topic"]         = topic
-st.session_state["_sv_subtopic"]      = subtopic
-st.session_state["_sv_qtype"]         = qtype
-st.session_state["_sv_difficulty"]    = difficulty
-st.session_state["_sv_qtext"]         = question_text
-st.session_state["_sv_passage"]       = passage_text
-st.session_state["_sv_q_eq_on"]       = q_eq_on
-st.session_state["_sv_q_eq_val"]      = q_eq_val
-st.session_state["_sv_q_img_on"]      = q_img_on
-st.session_state["_sv_q_img_file"]    = q_img_file
-st.session_state["_sv_options_final"] = options_final
-st.session_state["_sv_correct"]       = correct_answer
-st.session_state["_sv_extra"]         = extra_data
-st.session_state["_sv_expl"]          = explanation
-st.session_state["_sv_expl_eq_on"]    = expl_eq_on
-st.session_state["_sv_expl_eq_val"]   = expl_eq_val
-st.session_state["_sv_expl_img_on"]   = expl_img_on
-st.session_state["_sv_expl_img_file"] = expl_img_file
-st.session_state["_sv_tags"]          = tags_list
-st.session_state["_sv_keywords"]      = keywords_list
-
+# Stash current values for callback (not really needed now, but kept for consistency)
 _, save_col = st.columns([5,1])
 with save_col:
     st.button("💾  Save", key="save_btn", on_click=do_save, use_container_width=True)
-
-if st.session_state.get("_last_saved_id"):
-    st.success(f"✅ Saved — {st.session_state['_last_saved_id']}")
-    st.session_state["_last_saved_id"] = None
 
 # ─────────────────────────────────────────────────────────────────────────────
 # SESSION HISTORY
