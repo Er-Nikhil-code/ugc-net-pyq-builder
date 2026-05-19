@@ -1,0 +1,59 @@
+{
+  "question_id": "UGCNET_P1_2019_June_M_0007",
+  "exam": {
+    "year": 2019,
+    "session": "June",
+    "shift": "Morning"
+  },
+  "classification": {
+    "unit": "Teaching Aptitude",
+    "topic": "",
+    "subtopic": "",
+    "question_type": "MCQ",
+    "difficulty": "Medium"
+  },
+  "question": {
+    "text": "",
+    "options": [
+      {
+        "id": "A",
+        "text": "",
+        "equation": "",
+        "has_image": false
+      },
+      {
+        "id": "B",
+        "text": "",
+        "equation": "",
+        "has_image": false
+      },
+      {
+        "id": "C",
+        "text": "",
+        "equation": "",
+        "has_image": false
+      },
+      {
+        "id": "D",
+        "text": "",
+        "equation": "",
+        "has_image": false
+      }
+    ],
+    "correct_answer": "A"
+  },
+  "solution": {
+    "text": ""
+  },
+  "concepts": {
+    "tags": [],
+    "keywords": []
+  },
+  "retrieval": {
+    "embedding_text": ""
+  },
+  "meta": {
+    "created_at": "2026-05-19T15:41:56Z",
+    "version": "3.0"
+  }
+}
