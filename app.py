@@ -779,22 +779,18 @@ def do_save():
     # Prepare image list for upload
     images_to_upload = []
     
-    # Helper to add image to list if bytes exist
     def add_image(image_bytes, filename):
         if image_bytes:
             images_to_upload.append({"filename": filename, "bytes": image_bytes})
     
-    # 1. Question image
     if q_img_on and q_img_bytes:
         add_image(q_img_bytes, f"{saved_id}_q.jpg")
     
-    # 2. Option images
     if options_final and qtype not in ("Numerical","Fill in the Blank","Assertion-Reason"):
         for opt in st.session_state.options:
             if opt.get("img_bytes"):
                 add_image(opt["img_bytes"], f"{saved_id}_opt_{opt['id']}.jpg")
     
-    # 3. Explanation image
     if expl_img_on and expl_img_bytes:
         add_image(expl_img_bytes, f"{saved_id}_expl.jpg")
     
@@ -802,7 +798,6 @@ def do_save():
     final_q_block = {"text": question_text}
     if q_eq_on and q_eq_val.strip():
         final_q_block["equation"] = q_eq_val
-    # Note: image paths in JSON will be relative to data/images/ folder
     if q_img_on and q_img_bytes:
         final_q_block["image"] = f"images/{saved_id}_q.jpg"
     
@@ -863,7 +858,7 @@ def do_save():
         "meta": {"created_at": now_utc, "version": "3.0"},
     }
     
-    # Upload JSON and images to GitHub
+    # Upload JSON to GitHub
     json_bytes = json.dumps(final_data, indent=2, ensure_ascii=False).encode("utf-8")
     json_path = f"{DATA_DIR}/{saved_id}.json"
     success = upload_to_github(json_bytes, json_path, f"Add JSON for {saved_id}")
@@ -880,9 +875,7 @@ def do_save():
         st.success(f"✅ Saved — {saved_id}")
     else:
         st.error("❌ Failed to save to GitHub. Check token and repository settings.")
-    
-    st.rerun()
-
+        # Do not call st.rerun() here
 # Stash current values for callback (not really needed now, but kept for consistency)
 _, save_col = st.columns([5,1])
 with save_col:
