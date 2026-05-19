@@ -5,6 +5,7 @@ UGC NET Paper 1 — PYQ JSON Builder v3.0 (GitHub Storage)
 - Session history loaded from GitHub at startup
 - Works on Streamlit Cloud (no local file writes)
 - Automatically creates data/ and data/images/ folders
+- Fixed expander icons and session history visibility
 """
 
 import streamlit as st
@@ -22,7 +23,12 @@ st.set_page_config(
 )
 
 # ── GitHub API Configuration (from secrets) ───────────────────────────────────
-GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
+try:
+    GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
+except KeyError:
+    st.error("❌ GitHub token not found. Please add GITHUB_TOKEN to Streamlit secrets.")
+    st.stop()
+
 REPO_OWNER = "Er-Nikhil-code"
 REPO_NAME = "ugc-net-pyq-builder"
 DATA_DIR = "data"
@@ -56,11 +62,13 @@ def upload_to_github(file_bytes, repo_path, commit_message):
 
 # ── Helper: Ensure data/images folder exists ──────────────────────────────────
 def ensure_data_folders():
-    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{DATA_DIR}"
     headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    # Check data folder
+    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{DATA_DIR}"
     resp = requests.get(url, headers=headers)
     if resp.status_code == 404:
         upload_to_github(b"", f"{DATA_DIR}/.gitkeep", "Create data folder")
+    # Check images subfolder
     url_images = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{DATA_DIR}/images"
     resp_images = requests.get(url_images, headers=headers)
     if resp_images.status_code == 404:
@@ -115,25 +123,28 @@ def make_qid(year, session, shift, ctr=None):
     base = f"UGCNET_P1_{year}_{session}_{sc}"
     return f"{base}_{int(ctr):04d}" if ctr else base
 
-# ── Load session history from GitHub ──────────────────────────────────────────
+# ── Load session history from GitHub (robust) ────────────────────────────────
 def load_history_from_github():
     history = []
     files = list_files_in_github_folder(DATA_DIR)
     for file in files:
         if file["name"].endswith(".json") and file["name"] != "counter.json":
-            resp = requests.get(file["download_url"])
-            if resp.status_code == 200:
-                data = resp.json()
-                history.append({
-                    "id": data["question_id"],
-                    "type": data["classification"]["question_type"],
-                    "difficulty": data["classification"]["difficulty"],
-                    "json": data,
-                })
+            try:
+                resp = requests.get(file["download_url"])
+                if resp.status_code == 200:
+                    data = resp.json()
+                    history.append({
+                        "id": data["question_id"],
+                        "type": data["classification"]["question_type"],
+                        "difficulty": data["classification"]["difficulty"],
+                        "json": data,
+                    })
+            except Exception as e:
+                st.warning(f"Could not load {file['name']}: {str(e)}")
     history.sort(key=lambda x: x["id"])
     return history
 
-# ── CSS ───────────────────────────────────────────────────────────────────────
+# ── CSS with expander fix ─────────────────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
@@ -251,17 +262,14 @@ div[data-testid="stRadio"] label { font-size: 13px !important; }
     font-size: 13px;
 }
 
-/* ── Expander fix: hide broken Material Icons span ("oar" / "keyboard_arrow_right") ── */
+/* ── Expander fix: hide broken Material Icons span and replace with clean chevron ── */
 div[data-testid="stExpander"] details summary > span:first-of-type {
     display: none !important;
     visibility: hidden !important;
     width: 0 !important;
     overflow: hidden !important;
-    font-size: 0 !important;
-    opacity: 0 !important;
 }
 
-/* Clean CSS-only chevron replacement */
 div[data-testid="stExpander"] details summary {
     list-style: none !important;
     display: flex !important;
